@@ -1,0 +1,251 @@
+// One data model feeds every feature:
+// round -> holes -> shots {club, start, end}
+// Shots power club averages, scores power games, aggregates power stats.
+// Everything lives in localStorage. No backend, no account, no cost.
+
+const KEY = "my-yardage-v1";
+
+const DEFAULT_BAG = [
+  { id: "dr", name: "Driver", short: "Dr", manualYards: 230, shots: [] },
+  { id: "3w", name: "3 wood", short: "3W", manualYards: 210, shots: [] },
+  { id: "5i", name: "5 iron", short: "5i", manualYards: 180, shots: [] },
+  { id: "6i", name: "6 iron", short: "6i", manualYards: 170, shots: [] },
+  { id: "7i", name: "7 iron", short: "7i", manualYards: 158, shots: [] },
+  { id: "8i", name: "8 iron", short: "8i", manualYards: 147, shots: [] },
+  { id: "9i", name: "9 iron", short: "9i", manualYards: 136, shots: [] },
+  { id: "pw", name: "Pitching wedge", short: "PW", manualYards: 120, shots: [] },
+  { id: "sw", name: "Sand wedge", short: "SW", manualYards: 90, shots: [] },
+];
+
+export const CLUB_LIBRARY = [
+  { id: "dr", name: "Driver", short: "Dr", manualYards: 230 },
+  { id: "3w", name: "3 wood", short: "3W", manualYards: 210 },
+  { id: "5w", name: "5 wood", short: "5W", manualYards: 200 },
+  { id: "2i", name: "2 iron", short: "2i", manualYards: 205 },
+  { id: "4h", name: "4 hybrid", short: "4H", manualYards: 195 },
+  { id: "4i", name: "4 iron", short: "4i", manualYards: 188 },
+  { id: "5i", name: "5 iron", short: "5i", manualYards: 180 },
+  { id: "6i", name: "6 iron", short: "6i", manualYards: 170 },
+  { id: "7i", name: "7 iron", short: "7i", manualYards: 158 },
+  { id: "8i", name: "8 iron", short: "8i", manualYards: 147 },
+  { id: "9i", name: "9 iron", short: "9i", manualYards: 136 },
+  { id: "pw", name: "Pitching wedge", short: "PW", manualYards: 120 },
+  { id: "gw", name: "Gap wedge", short: "GW", manualYards: 105 },
+  { id: "sw", name: "Sand wedge", short: "SW", manualYards: 90 },
+  { id: "lw", name: "Lob wedge", short: "LW", manualYards: 72 },
+];
+
+const MAX_CLUBS = 14;
+
+function blank() {
+  return { bag: DEFAULT_BAG, rounds: [], activeRound: null };
+}
+
+export function load() {
+  try {
+    const raw = localStorage.getItem(KEY);
+    return raw ? JSON.parse(raw) : blank();
+  } catch {
+    return blank();
+  }
+}
+
+export function save(state) {
+  localStorage.setItem(KEY, JSON.stringify(state));
+}
+
+// ---- bag ----------------------------------------------------------------
+
+export function clubAverage(club) {
+  if (!club.shots.length) return { yards: club.manualYards, tracked: 0 };
+  const yards = Math.round(
+    club.shots.reduce((s, y) => s + y, 0) / club.shots.length
+  );
+  return { yards, tracked: club.shots.length };
+}
+
+export function addClub(state, libClub) {
+  if (state.bag.length >= MAX_CLUBS) return state;
+  if (state.bag.some((c) => c.id === libClub.id)) return state;
+  // Re-adding a club someone removed earlier resumes its history if we kept it.
+  const shelved = (state.shelf || []).find((c) => c.id === libClub.id);
+  const club = shelved || { ...libClub, shots: [] };
+  return {
+    ...state,
+    bag: [...state.bag, club].sort(
+      (a, b) => clubAverage(b).yards - clubAverage(a).yards
+    ),
+    shelf: (state.shelf || []).filter((c) => c.id !== libClub.id),
+  };
+}
+
+export function removeClub(state, id) {
+  const club = state.bag.find((c) => c.id === id);
+  if (!club) return state;
+  return {
+    ...state,
+    bag: state.bag.filter((c) => c.id !== id),
+    shelf: [...(state.shelf || []), club], // keep history — golfers rotate clubs back in
+  };
+}
+
+export function setManualYards(state, id, yards) {
+  return {
+    ...state,
+    bag: state.bag
+      .map((c) => (c.id === id ? { ...c, manualYards: yards, shots: [] } : c))
+      .sort((a, b) => clubAverage(b).yards - clubAverage(a).yards),
+  };
+}
+
+// ---- rounds and shots ---------------------------------------------------
+
+export function startRound(state, { course = "New round", players = ["You"] } = {}) {
+  const round = {
+    id: Date.now(),
+    course,
+    players,
+    startedAt: new Date().toISOString(),
+    holes: [], // { number, par, strokes: {player: n}, shots: [{clubId, yards}] }
+    currentHole: 1,
+    pendingShot: null, // { clubId, start:{lat,lon}, at }
+  };
+  return { ...state, activeRound: round };
+}
+
+export function markShotStart(state, clubId, position) {
+  const r = state.activeRound;
+  if (!r) return state;
+  return {
+    ...state,
+    activeRound: { ...r, pendingShot: { clubId, start: position, at: Date.now() } },
+  };
+}
+
+export function markShotEnd(state, position, yardsBetweenFn) {
+  const r = state.activeRound;
+  if (!r || !r.pendingShot) return state;
+  const yards = yardsBetweenFn(r.pendingShot.start, position);
+  const clubId = r.pendingShot.clubId;
+
+  // Sanity gate: ignore sub-5-yard "shots" (accidental taps) and >400 (GPS jumps)
+  const valid = yards >= 5 && yards <= 400;
+
+  const holes = [...r.holes];
+  let hole = holes.find((h) => h.number === r.currentHole);
+  if (!hole) {
+    hole = { number: r.currentHole, par: 4, strokes: {}, shots: [] };
+    holes.push(hole);
+  }
+  hole.shots = [...hole.shots, { clubId, yards, valid }];
+
+  const bag = valid
+    ? state.bag.map((c) =>
+        c.id === clubId ? { ...c, shots: [...c.shots, yards] } : c
+      )
+    : state.bag;
+
+  return {
+    ...state,
+    bag,
+    activeRound: { ...r, holes, pendingShot: null, lastLogged: { clubId, yards, valid } },
+  };
+}
+
+export function setHoleScore(state, player, strokes, par) {
+  const r = state.activeRound;
+  if (!r) return state;
+  const holes = [...r.holes];
+  let hole = holes.find((h) => h.number === r.currentHole);
+  if (!hole) {
+    hole = { number: r.currentHole, par: par ?? 4, strokes: {}, shots: [] };
+    holes.push(hole);
+  }
+  if (par) hole.par = par;
+  hole.strokes = { ...hole.strokes, [player]: strokes };
+  return { ...state, activeRound: { ...r, holes } };
+}
+
+export function nextHole(state) {
+  const r = state.activeRound;
+  if (!r) return state;
+  return {
+    ...state,
+    activeRound: { ...r, currentHole: Math.min(r.currentHole + 1, 18), pendingShot: null },
+  };
+}
+
+export function finishRound(state) {
+  const r = state.activeRound;
+  if (!r) return state;
+  return {
+    ...state,
+    rounds: [{ ...r, finishedAt: new Date().toISOString() }, ...state.rounds],
+    activeRound: null,
+  };
+}
+
+// ---- games math ---------------------------------------------------------
+
+/** Match play state between the first two players: +n = player one up. */
+export function matchStatus(round) {
+  const [p1, p2] = round.players;
+  if (!p2) return null;
+  let diff = 0;
+  for (const h of round.holes) {
+    const a = h.strokes[p1];
+    const b = h.strokes[p2];
+    if (a == null || b == null) continue;
+    if (a < b) diff += 1;
+    else if (b < a) diff -= 1;
+  }
+  return diff;
+}
+
+/** Skins with carries: £stake per hole, ties roll the pot forward. */
+export function skins(round, stake = 1) {
+  const won = Object.fromEntries(round.players.map((p) => [p, 0]));
+  let pot = 0;
+  for (const h of [...round.holes].sort((a, b) => a.number - b.number)) {
+    const entries = round.players
+      .map((p) => [p, h.strokes[p]])
+      .filter(([, s]) => s != null);
+    if (entries.length < round.players.length) continue;
+    pot += stake;
+    const best = Math.min(...entries.map(([, s]) => s));
+    const winners = entries.filter(([, s]) => s === best);
+    if (winners.length === 1) {
+      won[winners[0][0]] += pot;
+      pot = 0;
+    }
+    // tie: pot carries
+  }
+  return { won, carrying: pot };
+}
+
+/** Stableford points for one player, full handicap ignored for v0 (gross). */
+export function stableford(round, player) {
+  let pts = 0;
+  for (const h of round.holes) {
+    const s = h.strokes[player];
+    if (s == null) continue;
+    pts += Math.max(0, 2 + (h.par - s));
+  }
+  return pts;
+}
+
+// ---- stats --------------------------------------------------------------
+
+export function roundStats(round) {
+  const you = round.players[0];
+  let strokes = 0;
+  let par = 0;
+  let holesPlayed = 0;
+  for (const h of round.holes) {
+    if (h.strokes[you] == null) continue;
+    strokes += h.strokes[you];
+    par += h.par;
+    holesPlayed += 1;
+  }
+  return { strokes, toPar: strokes - par, holesPlayed };
+}
