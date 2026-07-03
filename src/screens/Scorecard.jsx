@@ -83,6 +83,80 @@ export default function Scorecard({ state, update }) {
     );
   }
 
+  // One 9-hole block: front carries an OUT column, back carries IN + TOT
+  // (the running grand total), each sized to fit a phone screen with no
+  // horizontal scrolling — that's why front/back are separate tables
+  // instead of one continuous 18-column grid.
+  function nineTable(title, holeNums, sumLabel, showGrandTotal) {
+    return (
+      <div style={{ marginTop: 14 }}>
+        <p className="muted small" style={{ marginBottom: 4, fontWeight: 600 }}>{title}</p>
+        <div className="sc-wrap">
+          <table className="sc-table">
+            <thead>
+              <tr>
+                <th className="sc-label" />
+                {holeNums.map((n) => (
+                  <th key={n}>{n}</th>
+                ))}
+                <th className="sc-sub">{sumLabel}</th>
+                {showGrandTotal && <th className="sc-sub">TOT</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {hasPar && (
+                <tr className="sc-meta">
+                  <td className="sc-label">Par</td>
+                  {holeNums.map((n) => (
+                    <td key={n}>{parFor(n) ?? "–"}</td>
+                  ))}
+                  <td className="sc-sub">{sumRange(parFor, holeNums) ?? "–"}</td>
+                  {showGrandTotal && (
+                    <td className="sc-sub">{sumRange(parFor, [...FRONT, ...BACK]) ?? "–"}</td>
+                  )}
+                </tr>
+              )}
+              {hasSi && (
+                <tr className="sc-meta">
+                  <td className="sc-label">S.I.</td>
+                  {holeNums.map((n) => (
+                    <td key={n}>{siFor(n) ?? "–"}</td>
+                  ))}
+                  <td className="sc-sub" />
+                  {showGrandTotal && <td className="sc-sub" />}
+                </tr>
+              )}
+              {hasYds && (
+                <tr className="sc-meta">
+                  <td className="sc-label">Yds</td>
+                  {holeNums.map((n) => (
+                    <td key={n}>{ydsFor(n) ?? "–"}</td>
+                  ))}
+                  <td className="sc-sub">{sumRange(ydsFor, holeNums) ?? "–"}</td>
+                  {showGrandTotal && (
+                    <td className="sc-sub">{sumRange(ydsFor, [...FRONT, ...BACK]) ?? "–"}</td>
+                  )}
+                </tr>
+              )}
+              {round.players.map((p) => (
+                <tr key={p}>
+                  <td className="sc-label">{p}</td>
+                  {holeNums.map((n) => scoreInput(n, p))}
+                  <td className="sc-sub num">{sumRange((n) => strokesFor(n, p), holeNums) ?? "–"}</td>
+                  {showGrandTotal && (
+                    <td className="sc-sub num">
+                      {sumRange((n) => strokesFor(n, p), [...FRONT, ...BACK]) ?? "–"}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="row" style={{ margin: "8px 0 12px" }}>
@@ -117,84 +191,12 @@ export default function Scorecard({ state, update }) {
         )}
       </div>
 
-      <div className="sc-wrap">
-        <table className="sc-table">
-          <thead>
-            <tr>
-              <th className="sc-label" />
-              {FRONT.map((n) => (
-                <th key={n}>{n}</th>
-              ))}
-              <th className="sc-sub">OUT</th>
-              {BACK.map((n) => (
-                <th key={n}>{n}</th>
-              ))}
-              <th className="sc-sub">IN</th>
-              <th className="sc-sub">TOT</th>
-            </tr>
-          </thead>
-          <tbody>
-            {hasPar && (
-              <tr className="sc-meta">
-                <td className="sc-label">Par</td>
-                {FRONT.map((n) => (
-                  <td key={n}>{parFor(n) ?? "–"}</td>
-                ))}
-                <td className="sc-sub">{sumRange(parFor, FRONT) ?? "–"}</td>
-                {BACK.map((n) => (
-                  <td key={n}>{parFor(n) ?? "–"}</td>
-                ))}
-                <td className="sc-sub">{sumRange(parFor, BACK) ?? "–"}</td>
-                <td className="sc-sub">{sumRange(parFor, [...FRONT, ...BACK]) ?? "–"}</td>
-              </tr>
-            )}
-            {hasSi && (
-              <tr className="sc-meta">
-                <td className="sc-label">S.I.</td>
-                {FRONT.map((n) => (
-                  <td key={n}>{siFor(n) ?? "–"}</td>
-                ))}
-                <td className="sc-sub" />
-                {BACK.map((n) => (
-                  <td key={n}>{siFor(n) ?? "–"}</td>
-                ))}
-                <td className="sc-sub" />
-                <td className="sc-sub" />
-              </tr>
-            )}
-            {hasYds && (
-              <tr className="sc-meta">
-                <td className="sc-label">Yds</td>
-                {FRONT.map((n) => (
-                  <td key={n}>{ydsFor(n) ?? "–"}</td>
-                ))}
-                <td className="sc-sub">{sumRange(ydsFor, FRONT) ?? "–"}</td>
-                {BACK.map((n) => (
-                  <td key={n}>{ydsFor(n) ?? "–"}</td>
-                ))}
-                <td className="sc-sub">{sumRange(ydsFor, BACK) ?? "–"}</td>
-                <td className="sc-sub">{sumRange(ydsFor, [...FRONT, ...BACK]) ?? "–"}</td>
-              </tr>
-            )}
-            {round.players.map((p) => (
-              <tr key={p}>
-                <td className="sc-label">{p}</td>
-                {FRONT.map((n) => scoreInput(n, p))}
-                <td className="sc-sub num">{sumRange((n) => strokesFor(n, p), FRONT) ?? "–"}</td>
-                {BACK.map((n) => scoreInput(n, p))}
-                <td className="sc-sub num">{sumRange((n) => strokesFor(n, p), BACK) ?? "–"}</td>
-                <td className="sc-sub num">
-                  {sumRange((n) => strokesFor(n, p), [...FRONT, ...BACK]) ?? "–"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {nineTable("Front 9", FRONT, "OUT", false)}
+      {nineTable("Back 9", BACK, "IN", true)}
 
       <div
         style={{
-          marginTop: 10, display: "flex", flexWrap: "wrap", gap: 10,
+          marginTop: 14, display: "flex", flexWrap: "wrap", gap: 10,
           background: "#fdfaf2", borderRadius: 14, padding: "8px 10px",
         }}
       >

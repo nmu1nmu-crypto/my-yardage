@@ -159,28 +159,27 @@ input[type="number"], input[type="text"] {
 /* Scorecard — styled like a real printed card: cream paper, ink text,
    the OUT/IN/TOT columns shaded like a scorer's summary box. */
 .sc-wrap {
-  overflow-x: auto; margin-top: 10px;
-  background: #fdfaf2; border-radius: var(--radius); padding: 10px 8px;
-  -webkit-overflow-scrolling: touch;
+  margin-top: 6px;
+  background: #fdfaf2; border-radius: var(--radius); padding: 8px 4px;
+  width: 100%; box-sizing: border-box;
 }
-.sc-table { border-collapse: collapse; font-family: var(--font-num); font-size: 12px; color: #2b2620; }
-.sc-table th, .sc-table td { padding: 5px 3px; text-align: center; min-width: 25px; }
+.sc-table { border-collapse: collapse; font-family: var(--font-num); font-size: 11px; color: #2b2620; width: 100%; table-layout: fixed; }
+.sc-table th, .sc-table td { padding: 4px 0; text-align: center; }
 .sc-table thead th {
-  font-family: var(--font-ui); font-size: 10px; font-weight: 700;
-  color: #8a8266; border-bottom: 2px solid #e6ddc4; letter-spacing: 0.02em;
+  font-family: var(--font-ui); font-size: 9px; font-weight: 700;
+  color: #8a8266; border-bottom: 2px solid #e6ddc4; letter-spacing: 0.01em;
 }
 .sc-label {
-  position: sticky; left: 0; background: #fdfaf2; z-index: 1;
-  text-align: left !important; padding-left: 6px !important;
-  font-family: var(--font-ui); font-weight: 600; min-width: 58px;
-  box-shadow: 2px 0 4px rgba(60, 50, 20, 0.08);
+  text-align: left !important; padding-left: 4px !important;
+  font-family: var(--font-ui); font-weight: 600; width: 15% !important;
+  font-size: 11px;
 }
-.sc-sub { background: #f0e8cf; font-weight: 700; }
+.sc-sub { background: #f0e8cf; font-weight: 700; width: 11% !important; }
 .sc-meta td { color: #857c60; }
 input.sc-input[type="number"] {
-  width: 25px; height: 25px; padding: 0; text-align: center;
-  border: 1px solid #e6ddc4; border-radius: 6px;
-  background: #ffffff; color: #2b2620; font-size: 12px;
+  width: 20px; height: 22px; padding: 0; text-align: center;
+  border: 1px solid #e6ddc4; border-radius: 5px;
+  background: #ffffff; color: #2b2620; font-size: 11px;
 }
 
 @media (prefers-reduced-motion: reduce) {
