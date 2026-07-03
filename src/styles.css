@@ -156,31 +156,71 @@ input[type="number"], input[type="text"] {
   font: 400 15px var(--font-ui); background: var(--card); color: var(--ink);
 }
 
-/* Scorecard — styled like a real printed card: cream paper, ink text,
-   the OUT/IN/TOT columns shaded like a scorer's summary box. */
-.sc-wrap {
-  margin-top: 6px;
-  background: #fdfaf2; border-radius: var(--radius); padding: 8px 4px;
-  width: 100%; box-sizing: border-box;
+/* Scorecard — expandable per-player cards, GolfGameBook-style: green
+   band headers, black column bar, white/grey cards, filled score circles. */
+.sg-header-card {
+  background: #fdfaf2; border-radius: var(--radius); padding: 12px 14px;
+  color: #1a1a1a; margin-top: 8px;
 }
-.sc-table { border-collapse: collapse; font-family: var(--font-num); font-size: 11px; color: #2b2620; width: 100%; table-layout: fixed; }
-.sc-table th, .sc-table td { padding: 4px 0; text-align: center; }
-.sc-table thead th {
-  font-family: var(--font-ui); font-size: 9px; font-weight: 700;
-  color: #8a8266; border-bottom: 2px solid #e6ddc4; letter-spacing: 0.01em;
+.sg-header-card .muted { color: #857c60; }
+.sg-brandmark { font-size: 11px; font-weight: 700; color: #1d9e75; white-space: nowrap; }
+
+.sg-banner {
+  background: #1a9e5c; color: #fff; text-align: center; font-weight: 700;
+  font-size: 13px; padding: 8px; border-radius: 10px; margin-top: 8px;
 }
-.sc-label {
-  text-align: left !important; padding-left: 4px !important;
-  font-family: var(--font-ui); font-weight: 600; width: 15% !important;
-  font-size: 11px;
+
+.sg-colhead {
+  display: flex; align-items: center; gap: 8px;
+  background: #1a1a1a; color: #fff; font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.02em;
+  padding: 8px 12px; border-radius: 10px; margin-top: 8px;
 }
-.sc-sub { background: #f0e8cf; font-weight: 700; width: 11% !important; }
-.sc-meta td { color: #857c60; }
-input.sc-input[type="number"] {
-  width: 20px; height: 22px; padding: 0; text-align: center;
-  border: 1px solid #e6ddc4; border-radius: 5px;
-  background: #ffffff; color: #2b2620; font-size: 11px;
+
+.sg-card {
+  background: #efece3; border-radius: 14px; margin-top: 8px; overflow: hidden;
 }
+.sg-card.open { background: #ffffff; box-shadow: 0 2px 10px rgba(20, 20, 10, 0.15); }
+.sg-summary {
+  width: 100%; display: flex; align-items: center; gap: 10px;
+  padding: 12px; background: none; border: none; cursor: pointer; text-align: left;
+}
+.sg-rank {
+  width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
+  background: #dcd6c2; color: #2b2620; font-weight: 700; font-size: 12px;
+  display: grid; place-items: center;
+}
+.sg-name { font-weight: 700; color: #1a1a1a; font-size: 14px; }
+.sg-score { font-weight: 700; font-size: 17px; color: #1a1a1a; min-width: 30px; text-align: right; }
+.sg-topar { font-weight: 700; font-size: 15px; color: #1a1a1a; min-width: 36px; text-align: right; }
+.sg-topar.good { color: #e0433d; }
+.sg-thru { color: #8a8266; font-size: 13px; min-width: 26px; text-align: right; }
+
+.sg-grid { padding: 0 10px 12px; }
+.sg-holebar {
+  display: grid; grid-template-columns: 15% repeat(9, 1fr) 11%;
+  background: #1a9e5c; color: #fff; font-size: 9px; font-weight: 700;
+  border-radius: 8px; padding: 5px 0; text-align: center; margin-top: 8px;
+}
+.sg-hb-label { text-align: left !important; padding-left: 6px; }
+.sg-row {
+  display: grid; grid-template-columns: 15% repeat(9, 1fr) 11%;
+  font-family: var(--font-num); font-size: 11px; color: #857c60;
+  padding: 4px 0; text-align: center; align-items: center;
+}
+.sg-row-label { text-align: left !important; padding-left: 6px; font-family: var(--font-ui); font-weight: 600; color: #2b2620; }
+.sg-row-sum { font-weight: 700; color: #2b2620; }
+.sg-score-row { color: #2b2620; }
+input.sg-input[type="number"] {
+  width: 20px; height: 22px; padding: 0; margin: 0 auto; display: block;
+  text-align: center; border: 1px solid #e6ddc4; border-radius: 50%;
+  background: #ffffff; color: #2b2620; font-size: 11px; font-weight: 700;
+}
+.sg-footer {
+  display: flex; justify-content: space-between; margin-top: 10px;
+  font-size: 12px; color: #857c60;
+}
+.sg-footer strong { color: #1a1a1a; margin-left: 4px; }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

@@ -2,36 +2,30 @@ import { useState } from "react";
 import { setScoreForHole } from "../lib/store.js";
 import { ATTRIBUTION } from "../lib/courseApi.js";
 
-const TEE_DOT = {
-  red: "#d43d2e",
-  white: "#f2f6f2",
-  yellow: "#f2c94c",
-  gold: "#f2c94c",
-  blue: "#2e6fd4",
-  green: "#1d9e75",
-  black: "#111111",
-};
-
 const FRONT = Array.from({ length: 9 }, (_, i) => i + 1);
 const BACK = Array.from({ length: 9 }, (_, i) => i + 10);
 
-// Standard scorecard colour convention: par blue, bogey red, double-bogey+
-// black, birdie green, eagle-or-better green with a circle round the score.
-function scoreStyle(strokes, par) {
-  if (strokes == null || par == null) return {};
+// Filled-circle score convention (matches most commercial scorecard apps):
+// red = birdie or better, blue = bogey, navy = double-bogey or worse,
+// no fill = par.
+function scoreCircle(strokes, par) {
+  if (strokes == null || par == null) return null;
   const diff = strokes - par;
-  if (diff <= -2) {
-    return { color: "#16a34a", borderColor: "#16a34a", borderWidth: 2, borderRadius: "50%", fontWeight: 700 };
-  }
-  if (diff === -1) return { color: "#16a34a", fontWeight: 700 };
-  if (diff === 0) return { color: "#2e6fd4" };
-  if (diff === 1) return { color: "#d43d2e" };
-  return { color: "#111111", fontWeight: 700 };
+  if (diff <= -1) return { background: "#e0433d", color: "#fff", borderColor: "#e0433d" };
+  if (diff === 1) return { background: "#2e6fd4", color: "#fff", borderColor: "#2e6fd4" };
+  if (diff >= 2) return { background: "#132a52", color: "#fff", borderColor: "#132a52" };
+  return null;
+}
+
+function toParLabel(n) {
+  if (n == null) return "–";
+  if (n === 0) return "E";
+  return n > 0 ? `+${n}` : `${n}`;
 }
 
 export default function Scorecard({ state, update }) {
   const round = state.activeRound ?? state.rounds[0];
-  const [teeKey, setTeeKey] = useState(null);
+  const [expanded, setExpanded] = useState(null);
 
   if (!round) {
     return (
@@ -43,14 +37,8 @@ export default function Scorecard({ state, update }) {
   }
 
   const holeByNum = Object.fromEntries(round.holes.map((h) => [h.number, h]));
-  const availableTees = Array.from(
-    new Set(round.holes.flatMap((h) => (h.yardages ? Object.keys(h.yardages) : [])))
-  );
-  const tee = teeKey && availableTees.includes(teeKey) ? teeKey : availableTees[0];
-
   const parFor = (n) => holeByNum[n]?.par ?? null;
   const siFor = (n) => holeByNum[n]?.strokeIndex ?? null;
-  const ydsFor = (n) => (tee ? holeByNum[n]?.yardages?.[tee] ?? null : null);
   const strokesFor = (n, p) => holeByNum[n]?.strokes?.[p] ?? null;
 
   function sumRange(getter, nums) {
@@ -58,169 +46,143 @@ export default function Scorecard({ state, update }) {
     return vals.length ? vals.reduce((a, b) => a + b, 0) : null;
   }
 
-  const hasPar = round.holes.some((h) => h.par != null);
   const hasSi = round.holes.some((h) => h.strokeIndex != null);
-  const hasYds = round.holes.some((h) => h.yardages);
+  const totalPar = sumRange(parFor, [...FRONT, ...BACK]);
 
-  function scoreInput(n, p) {
-    const strokes = strokesFor(n, p);
-    return (
-      <td key={n}>
-        <input
-          className="sc-input num"
-          type="number"
-          inputMode="numeric"
-          value={strokes ?? ""}
-          style={scoreStyle(strokes, parFor(n))}
-          onChange={(e) => {
-            const v = parseInt(e.target.value, 10);
-            if (!Number.isNaN(v) && v > 0 && v < 20) {
-              update(setScoreForHole, n, p, v, parFor(n));
-            }
-          }}
-        />
-      </td>
-    );
+  function summaryFor(p) {
+    const played = [...FRONT, ...BACK].filter((n) => strokesFor(n, p) != null);
+    const thru = played.length;
+    if (!thru) return { thru: 0, score: null, toPar: null };
+    const score = sumRange((n) => strokesFor(n, p), played);
+    const parPlayed = sumRange(parFor, played);
+    return { thru, score, toPar: parPlayed != null ? score - parPlayed : null };
   }
 
-  // One 9-hole block: front carries an OUT column, back carries IN + TOT
-  // (the running grand total), each sized to fit a phone screen with no
-  // horizontal scrolling — that's why front/back are separate tables
-  // instead of one continuous 18-column grid.
-  function nineTable(title, holeNums, sumLabel, showGrandTotal) {
+  const ranked = round.players
+    .map((p) => ({ p, ...summaryFor(p) }))
+    .sort((a, b) => {
+      if (a.thru === 0 && b.thru === 0) return 0;
+      if (a.thru === 0) return 1;
+      if (b.thru === 0) return -1;
+      return (a.toPar ?? 0) - (b.toPar ?? 0);
+    });
+
+  function nineBlock(player, holeNums, sumLabel) {
     return (
-      <div style={{ marginTop: 14 }}>
-        <p className="muted small" style={{ marginBottom: 4, fontWeight: 600 }}>{title}</p>
-        <div className="sc-wrap">
-          <table className="sc-table">
-            <thead>
-              <tr>
-                <th className="sc-label" />
-                {holeNums.map((n) => (
-                  <th key={n}>{n}</th>
-                ))}
-                <th className="sc-sub">{sumLabel}</th>
-                {showGrandTotal && <th className="sc-sub">TOT</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {hasPar && (
-                <tr className="sc-meta">
-                  <td className="sc-label">Par</td>
-                  {holeNums.map((n) => (
-                    <td key={n}>{parFor(n) ?? "–"}</td>
-                  ))}
-                  <td className="sc-sub">{sumRange(parFor, holeNums) ?? "–"}</td>
-                  {showGrandTotal && (
-                    <td className="sc-sub">{sumRange(parFor, [...FRONT, ...BACK]) ?? "–"}</td>
-                  )}
-                </tr>
-              )}
-              {hasSi && (
-                <tr className="sc-meta">
-                  <td className="sc-label">S.I.</td>
-                  {holeNums.map((n) => (
-                    <td key={n}>{siFor(n) ?? "–"}</td>
-                  ))}
-                  <td className="sc-sub" />
-                  {showGrandTotal && <td className="sc-sub" />}
-                </tr>
-              )}
-              {hasYds && (
-                <tr className="sc-meta">
-                  <td className="sc-label">Yds</td>
-                  {holeNums.map((n) => (
-                    <td key={n}>{ydsFor(n) ?? "–"}</td>
-                  ))}
-                  <td className="sc-sub">{sumRange(ydsFor, holeNums) ?? "–"}</td>
-                  {showGrandTotal && (
-                    <td className="sc-sub">{sumRange(ydsFor, [...FRONT, ...BACK]) ?? "–"}</td>
-                  )}
-                </tr>
-              )}
-              {round.players.map((p) => (
-                <tr key={p}>
-                  <td className="sc-label">{p}</td>
-                  {holeNums.map((n) => scoreInput(n, p))}
-                  <td className="sc-sub num">{sumRange((n) => strokesFor(n, p), holeNums) ?? "–"}</td>
-                  {showGrandTotal && (
-                    <td className="sc-sub num">
-                      {sumRange((n) => strokesFor(n, p), [...FRONT, ...BACK]) ?? "–"}
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <>
+        <div className="sg-holebar">
+          <span className="sg-hb-label">Hole</span>
+          {holeNums.map((n) => (
+            <span key={n}>{n}</span>
+          ))}
+          <span className="sg-hb-label">{sumLabel}</span>
         </div>
-      </div>
+        {hasSi && (
+          <div className="sg-row">
+            <span className="sg-row-label">Slope</span>
+            {holeNums.map((n) => (
+              <span key={n}>{siFor(n) ?? "–"}</span>
+            ))}
+            <span />
+          </div>
+        )}
+        <div className="sg-row">
+          <span className="sg-row-label">Par</span>
+          {holeNums.map((n) => (
+            <span key={n}>{parFor(n) ?? "–"}</span>
+          ))}
+          <span className="sg-row-sum">{sumRange(parFor, holeNums) ?? "–"}</span>
+        </div>
+        <div className="sg-row sg-score-row">
+          <span className="sg-row-label">Score</span>
+          {holeNums.map((n) => {
+            const strokes = strokesFor(n, player);
+            const circle = scoreCircle(strokes, parFor(n));
+            return (
+              <span key={n}>
+                <input
+                  className="sg-input num"
+                  type="number"
+                  inputMode="numeric"
+                  value={strokes ?? ""}
+                  style={circle ?? {}}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    if (!Number.isNaN(v) && v > 0 && v < 20) {
+                      update(setScoreForHole, n, player, v, parFor(n));
+                    }
+                  }}
+                />
+              </span>
+            );
+          })}
+          <span className="sg-row-sum num">{sumRange((n) => strokesFor(n, player), holeNums) ?? "–"}</span>
+        </div>
+      </>
     );
   }
 
   return (
     <>
-      <div className="row" style={{ margin: "8px 0 12px" }}>
-        <div>
-          <strong style={{ fontSize: 18 }}>Scorecard</strong>
-          <div className="muted small">{round.course}</div>
-        </div>
-        {availableTees.length > 1 && (
-          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>
-            {availableTees.map((t) => (
-              <button
-                key={t}
-                className={`chip ${t === tee ? "on" : ""}`}
-                style={{ padding: "3px 8px" }}
-                onClick={() => setTeeKey(t)}
-              >
-                <span
-                  style={{
-                    display: "inline-block",
-                    width: 8,
-                    height: 8,
-                    borderRadius: 99,
-                    background: TEE_DOT[t] || "#999",
-                    marginRight: 4,
-                    border: t === "white" ? "1px solid #999" : "none",
-                  }}
-                />
-                {t}
-              </button>
-            ))}
+      <div className="sg-header-card">
+        <div className="row">
+          <div>
+            <strong style={{ fontSize: 18 }}>{round.course}</strong>
+            <p className="muted small" style={{ margin: "2px 0 0" }}>
+              {new Date(round.startedAt).toLocaleDateString()}
+            </p>
           </div>
-        )}
+          <div className="sg-brandmark">⛳ My Yardage</div>
+        </div>
       </div>
 
-      {nineTable("Front 9", FRONT, "OUT", false)}
-      {nineTable("Back 9", BACK, "IN", true)}
+      <div className="sg-banner">Stroke Play</div>
 
-      <div
-        style={{
-          marginTop: 14, display: "flex", flexWrap: "wrap", gap: 10,
-          background: "#fdfaf2", borderRadius: 14, padding: "8px 10px",
-        }}
-      >
-        {[
-          { label: "Eagle+", style: scoreStyle(-2, 0) },
-          { label: "Birdie", style: scoreStyle(-1, 0) },
-          { label: "Par", style: scoreStyle(0, 0) },
-          { label: "Bogey", style: scoreStyle(1, 0) },
-          { label: "Double+", style: scoreStyle(2, 0) },
-        ].map(({ label, style }) => (
-          <span key={label} className="small" style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <span
-              style={{
-                width: 14, height: 14, borderRadius: style.borderRadius ?? "50%",
-                border: `2px solid ${style.borderColor ?? style.color}`,
-                background: "#fdfaf2",
-              }}
-            />
-            <span style={{ color: style.color, opacity: 0.9 }}>{label}</span>
-          </span>
-        ))}
+      <div className="sg-colhead">
+        <span style={{ width: 22, textAlign: "center" }}>#</span>
+        <span style={{ flex: 1 }}>Name</span>
+        <span style={{ minWidth: 30, textAlign: "right" }}>Score</span>
+        <span style={{ minWidth: 36, textAlign: "right" }}>To par</span>
+        <span style={{ minWidth: 26, textAlign: "right" }}>Thru</span>
       </div>
 
-      <p className="small" style={{ opacity: 0.5, marginTop: 10 }}>
+      {ranked.map(({ p, thru, score, toPar }, i) => {
+        const isOpen = expanded === p;
+        return (
+          <div key={p} className={`sg-card ${isOpen ? "open" : ""}`}>
+            <button className="sg-summary" onClick={() => setExpanded(isOpen ? null : p)}>
+              <span className="sg-rank">{i + 1}</span>
+              <span style={{ flex: 1 }} className="sg-name">
+                {p}
+              </span>
+              <span className="sg-score num">{score ?? "–"}</span>
+              <span className={`sg-topar num ${toPar != null && toPar < 0 ? "good" : ""}`}>
+                {toParLabel(toPar)}
+              </span>
+              <span className="sg-thru num">{thru || "–"}</span>
+            </button>
+            {isOpen && (
+              <div className="sg-grid">
+                {nineBlock(p, FRONT, "Out")}
+                {nineBlock(p, BACK, "In")}
+                <div className="sg-footer">
+                  <span>
+                    Par <strong className="num">{totalPar ?? "–"}</strong>
+                  </span>
+                  <span>
+                    Score <strong className="num">{score ?? "–"}</strong>
+                  </span>
+                  <span>
+                    Position <strong className="num">{thru ? `${i + 1}.` : "–"}</strong>
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      <p className="small" style={{ opacity: 0.5, marginTop: 12 }}>
         {round.courseId ? ATTRIBUTION : "Par entered as each hole is played — link a course from Home for full yardage and stroke index."}
       </p>
     </>
