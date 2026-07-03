@@ -46,7 +46,9 @@ body {
 .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 
 .hero {
-  background: var(--pine-800);
+  background-color: var(--pine-800);
+  background-size: cover;
+  background-position: center;
   color: var(--pine-50);
   margin: -16px -16px 0;
   padding: 20px 16px 40px;

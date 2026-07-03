@@ -1,0 +1,28 @@
+<svg viewBox="0 0 800 450" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Golf course at sunrise">
+  <defs>
+    <linearGradient id="skySunrise" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#FCE8D0"/>
+      <stop offset="45%" stop-color="#F7C6A3"/>
+      <stop offset="100%" stop-color="#F2905B"/>
+    </linearGradient>
+    <radialGradient id="sunGlowSunrise" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFF3E0" stop-opacity="0.95"/>
+      <stop offset="60%" stop-color="#FAC775" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#FAC775" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="hillSunrise" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0F6E56"/>
+      <stop offset="100%" stop-color="#04342C"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="url(#skySunrise)"/>
+  <circle cx="590" cy="300" r="160" fill="url(#sunGlowSunrise)"/>
+  <circle cx="590" cy="300" r="46" fill="#FAEEDA"/>
+  <path d="M0,300 Q160,255 320,285 T650,270 T800,290 L800,450 L0,450 Z" fill="#085041" opacity="0.55"/>
+  <path d="M0,340 Q150,300 340,325 T700,310 T800,330 L800,450 L0,450 Z" fill="url(#hillSunrise)"/>
+  <ellipse cx="230" cy="370" rx="70" ry="16" fill="#F7F5EF" opacity="0.5"/>
+  <ellipse cx="520" cy="390" rx="90" ry="14" fill="#F7F5EF" opacity="0.4"/>
+  <ellipse cx="360" cy="410" rx="46" ry="10" fill="#E1F5EE" opacity="0.5"/>
+  <rect x="447" y="330" width="4" height="60" fill="#04342C"/>
+  <path d="M451,330 L490,342 L451,354 Z" fill="#EF9F27"/>
+</svg>

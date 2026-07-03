@@ -1,0 +1,26 @@
+<svg viewBox="0 0 800 450" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Golf course under dramatic stormy sky">
+  <defs>
+    <linearGradient id="skyDramatic" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1B2A2E"/>
+      <stop offset="55%" stop-color="#33474C"/>
+      <stop offset="100%" stop-color="#5A6E68"/>
+    </linearGradient>
+    <linearGradient id="rayDramatic" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#FAEEDA" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#FAEEDA" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="hillDramatic" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0A2A24"/>
+      <stop offset="100%" stop-color="#04342C"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="url(#skyDramatic)"/>
+  <path d="M0,90 Q120,50 260,85 T560,70 T800,95 L800,0 L0,0 Z" fill="#45585C" opacity="0.8"/>
+  <path d="M60,120 Q220,70 400,115 T780,100" fill="none" stroke="#0F6E56" stroke-opacity="0.25" stroke-width="2"/>
+  <polygon points="520,10 620,10 480,300 380,300" fill="url(#rayDramatic)"/>
+  <path d="M0,300 Q150,260 330,285 T700,270 T800,290 L800,450 L0,450 Z" fill="url(#hillDramatic)"/>
+  <ellipse cx="260" cy="360" rx="60" ry="13" fill="#0F6E56" opacity="0.4"/>
+  <rect x="447" y="310" width="4" height="60" fill="#020F0C"/>
+  <path d="M451,310 L490,322 L451,334 Z" fill="#EF9F27"/>
+  <path d="M0,300 L800,290" stroke="#EF9F27" stroke-width="1" opacity="0.3"/>
+</svg>

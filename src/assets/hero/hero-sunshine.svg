@@ -1,0 +1,30 @@
+<svg viewBox="0 0 800 450" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Golf course in bright sunshine">
+  <defs>
+    <linearGradient id="skySunshine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#8FD3E8"/>
+      <stop offset="100%" stop-color="#EAF7FB"/>
+    </linearGradient>
+    <radialGradient id="sunGlowSunshine" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFDF4" stop-opacity="1"/>
+      <stop offset="55%" stop-color="#FDCB58" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#FDCB58" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fairwaySunshine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1D9E75"/>
+      <stop offset="100%" stop-color="#085041"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="url(#skySunshine)"/>
+  <circle cx="640" cy="90" r="130" fill="url(#sunGlowSunshine)"/>
+  <circle cx="640" cy="90" r="36" fill="#FFFBEF"/>
+  <path d="M0,260 Q140,220 300,240 T620,225 T800,245 L800,450 L0,450 Z" fill="#5DCAA5" opacity="0.6"/>
+  <path d="M0,300 Q160,270 340,290 T700,275 T800,295 L800,450 L0,450 Z" fill="url(#fairwaySunshine)"/>
+  <g opacity="0.9">
+    <ellipse cx="180" cy="330" rx="26" ry="46" fill="#04342C"/>
+    <ellipse cx="200" cy="325" rx="20" ry="38" fill="#04342C"/>
+  </g>
+  <ellipse cx="470" cy="360" rx="80" ry="15" fill="#FAEEDA" opacity="0.85"/>
+  <rect x="527" y="300" width="4" height="65" fill="#04342C"/>
+  <path d="M531,300 L572,312 L531,324 Z" fill="#EF9F27"/>
+  <path d="M180,375 L206,410" stroke="#04342C" stroke-width="4" opacity="0.25"/>
+</svg>

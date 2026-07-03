@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { clubAverage, roundStats, skins } from "../lib/store.js";
 
-export default function Home({ state, onStartRound }) {
+export default function Home({ state, hero, onStartRound }) {
   const [players, setPlayers] = useState("You");
   const recent = state.rounds.slice(0, 4);
 
@@ -28,7 +28,14 @@ export default function Home({ state, onStartRound }) {
 
   return (
     <>
-      <header className="hero">
+      <header
+        className="hero"
+        style={
+          hero && {
+            backgroundImage: `linear-gradient(rgba(4,52,44,0.55), rgba(4,52,44,0.88)), url(${hero.src})`,
+          }
+        }
+      >
         <div className="brandmark">
           <span className="dot" aria-hidden="true">⛳</span>
           My Yardage

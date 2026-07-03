@@ -1,4 +1,6 @@
 // All distance math is on-device. No API, no cost, works offline.
+import { Capacitor } from "@capacitor/core";
+import { Geolocation } from "@capacitor/geolocation";
 
 const R = 6371000; // earth radius, metres
 const toRad = (d) => (d * Math.PI) / 180;
@@ -29,8 +31,17 @@ export function bearingDegrees(a, b) {
   return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
 
-/** Wrap navigator.geolocation in a promise. */
-export function currentPosition() {
+/** Current GPS fix as {lat, lon}. Uses the native plugin inside the iOS/Android
+ * app shell (reliable permission flow); falls back to the browser API for the
+ * web/PWA build. */
+export async function currentPosition() {
+  const opts = { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 };
+
+  if (Capacitor.isNativePlatform()) {
+    const pos = await Geolocation.getCurrentPosition(opts);
+    return { lat: pos.coords.latitude, lon: pos.coords.longitude };
+  }
+
   return new Promise((resolve, reject) => {
     if (!("geolocation" in navigator)) {
       reject(new Error("Geolocation isn't available on this device"));
@@ -39,7 +50,7 @@ export function currentPosition() {
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
       (err) => reject(err),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 }
+      opts
     );
   });
 }

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import * as store from "./lib/store.js";
+import { nextHeroImage } from "./lib/heroRotation.js";
 import Home from "./screens/Home.jsx";
 import Round from "./screens/Round.jsx";
 import Games from "./screens/Games.jsx";
@@ -15,6 +16,7 @@ const TABS = [
 export default function App() {
   const [state, setState] = useState(store.load);
   const [tab, setTab] = useState("home");
+  const [hero] = useState(nextHeroImage);
 
   useEffect(() => store.save(state), [state]);
 
@@ -24,6 +26,7 @@ export default function App() {
     home: (
       <Home
         state={state}
+        hero={hero}
         onStartRound={(opts) => {
           update(store.startRound, opts);
           setTab("round");
