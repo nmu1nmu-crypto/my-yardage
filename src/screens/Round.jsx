@@ -248,7 +248,10 @@ export default function Round({ state, update, goGames }) {
       {msg && <p className="muted small" style={{ textAlign: "center" }}>{msg}</p>}
 
       <div className="card">
-        <strong style={{ fontSize: 14 }}>Score this hole</strong>
+        <div className="row">
+          <strong style={{ fontSize: 14 }}>Score this hole</strong>
+          <span className="pill num">Hole {round.currentHole}</span>
+        </div>
         {round.players.map((p) => (
           <div className="list-row row" key={p}>
             <span style={{ fontSize: 14 }}>{p}</span>
