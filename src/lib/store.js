@@ -106,13 +106,29 @@ export function setManualYards(state, id, yards) {
 
 // ---- rounds and shots ---------------------------------------------------
 
-export function startRound(state, { course = "New round", players = ["You"] } = {}) {
+const MAX_PLAYERS = 4;
+
+// courseHoles (optional): [{ number, par, strokeIndex, yardages }] from a
+// selected course lookup. When absent, holes are created lazily with par 4
+// as each hole is reached — unchanged from the original behaviour.
+export function startRound(state, { course = "New round", courseId = null, courseHoles = null, players = ["You"] } = {}) {
   const round = {
     id: Date.now(),
     course,
-    players,
+    courseId,
+    players: players.slice(0, MAX_PLAYERS),
     startedAt: new Date().toISOString(),
-    holes: [], // { number, par, strokes: {player: n}, shots: [{clubId, yards}] }
+    // { number, par, strokeIndex, yardages, strokes: {player: n}, shots: [{clubId, yards}] }
+    holes: courseHoles
+      ? courseHoles.map((h) => ({
+          number: h.number,
+          par: h.par ?? 4,
+          strokeIndex: h.strokeIndex ?? null,
+          yardages: h.yardages ?? null,
+          strokes: {},
+          shots: [],
+        }))
+      : [],
     currentHole: 1,
     pendingShot: null, // { clubId, start:{lat,lon}, at }
   };
@@ -159,12 +175,19 @@ export function markShotEnd(state, position, yardsBetweenFn) {
 }
 
 export function setHoleScore(state, player, strokes, par) {
+  return setScoreForHole(state, state.activeRound?.currentHole, player, strokes, par);
+}
+
+/** Same as setHoleScore but targets any hole number — used by the full
+ * scorecard grid, where a player may enter or correct a score for a hole
+ * other than the one currently in progress. */
+export function setScoreForHole(state, holeNumber, player, strokes, par) {
   const r = state.activeRound;
   if (!r) return state;
   const holes = [...r.holes];
-  let hole = holes.find((h) => h.number === r.currentHole);
+  let hole = holes.find((h) => h.number === holeNumber);
   if (!hole) {
-    hole = { number: r.currentHole, par: par ?? 4, strokes: {}, shots: [] };
+    hole = { number: holeNumber, par: par ?? 4, strokes: {}, shots: [] };
     holes.push(hole);
   }
   if (par) hole.par = par;
