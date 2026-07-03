@@ -31,15 +31,17 @@ export function bearingDegrees(a, b) {
   return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
 
-/** Current GPS fix as {lat, lon}. Uses the native plugin inside the iOS/Android
- * app shell (reliable permission flow); falls back to the browser API for the
- * web/PWA build. */
+/** Current GPS fix as {lat, lon, altitude}. altitude is metres above sea level,
+ * null when the device can't supply it (common indoors or on older hardware) —
+ * callers must treat it as optional. Uses the native plugin inside the
+ * iOS/Android app shell (reliable permission flow); falls back to the browser
+ * API for the web/PWA build. */
 export async function currentPosition() {
   const opts = { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 };
 
   if (Capacitor.isNativePlatform()) {
     const pos = await Geolocation.getCurrentPosition(opts);
-    return { lat: pos.coords.latitude, lon: pos.coords.longitude };
+    return { lat: pos.coords.latitude, lon: pos.coords.longitude, altitude: pos.coords.altitude };
   }
 
   return new Promise((resolve, reject) => {
@@ -48,9 +50,20 @@ export async function currentPosition() {
       return;
     }
     navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      (pos) =>
+        resolve({
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          altitude: pos.coords.altitude,
+        }),
       (err) => reject(err),
       opts
     );
   });
+}
+
+/** Elevation change from a to b, in feet. Positive = b is higher (uphill). */
+export function elevationDeltaFeet(a, b) {
+  if (a?.altitude == null || b?.altitude == null) return 0;
+  return (b.altitude - a.altitude) * 3.28084;
 }

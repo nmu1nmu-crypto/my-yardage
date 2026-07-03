@@ -33,6 +33,12 @@ export const CLUB_LIBRARY = [
   { id: "gw", name: "Gap wedge", short: "GW", manualYards: 105 },
   { id: "sw", name: "Sand wedge", short: "SW", manualYards: 90 },
   { id: "lw", name: "Lob wedge", short: "LW", manualYards: 72 },
+  { id: "w50", name: "50° wedge", short: "50°", manualYards: 100 },
+  { id: "w52", name: "52° wedge", short: "52°", manualYards: 92 },
+  { id: "w54", name: "54° wedge", short: "54°", manualYards: 85 },
+  { id: "w56", name: "56° wedge", short: "56°", manualYards: 78 },
+  { id: "w58", name: "58° wedge", short: "58°", manualYards: 68 },
+  { id: "w60", name: "60° wedge", short: "60°", manualYards: 60 },
 ];
 
 const MAX_CLUBS = 14;

@@ -68,7 +68,7 @@ export default function Bag({ state, update }) {
                     </button>
                   </div>
                 ) : (
-                  <div className="small num" style={{ color: "var(--pine-600)" }}>
+                  <div className="small num" style={{ color: "var(--pine-200)" }}>
                     {yards} yds {tracked ? "avg carry" : "estimated"}
                   </div>
                 )}
@@ -120,7 +120,7 @@ export default function Bag({ state, update }) {
               <button
                 key={c.id}
                 className="chip"
-                style={{ background: "var(--card)" }}
+                style={{ background: "#ffffff", color: "var(--pine-800)", borderColor: "var(--pine-100)" }}
                 onClick={() => update(addClub, c)}
               >
                 {c.short} · {c.name}

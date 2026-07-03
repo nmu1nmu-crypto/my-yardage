@@ -108,7 +108,7 @@ export default function Games({ state }) {
         <div className="row" style={{ marginTop: 10 }}>
           {round.players.map((p) => (
             <div key={p}>
-              <p className="num" style={{ fontSize: 20, fontWeight: 600, margin: 0, color: "var(--pine-800)" }}>
+              <p className="num" style={{ fontSize: 20, fontWeight: 600, margin: 0, color: "var(--pine-200)" }}>
                 {stableford(round, p)} pts
               </p>
               <p className="muted small" style={{ margin: 0 }}>{p}</p>

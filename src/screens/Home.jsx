@@ -90,7 +90,7 @@ export default function Home({ state, hero, onStartRound }) {
       <div className="card">
         <div className="row">
           <strong style={{ fontSize: 14 }}>Your bag</strong>
-          <span className="small" style={{ color: "var(--pine-600)" }}>
+          <span className="small" style={{ color: "var(--pine-200)" }}>
             {trackedTotal} shots tracked
           </span>
         </div>
