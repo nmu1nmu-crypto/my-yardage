@@ -15,6 +15,20 @@ const TEE_DOT = {
 const FRONT = Array.from({ length: 9 }, (_, i) => i + 1);
 const BACK = Array.from({ length: 9 }, (_, i) => i + 10);
 
+// Standard scorecard colour convention: par blue, bogey red, double-bogey+
+// black, birdie green, eagle-or-better green with a circle round the score.
+function scoreStyle(strokes, par) {
+  if (strokes == null || par == null) return {};
+  const diff = strokes - par;
+  if (diff <= -2) {
+    return { color: "#16a34a", borderColor: "#16a34a", borderWidth: 2, borderRadius: "50%", fontWeight: 700 };
+  }
+  if (diff === -1) return { color: "#16a34a", fontWeight: 700 };
+  if (diff === 0) return { color: "#2e6fd4" };
+  if (diff === 1) return { color: "#d43d2e" };
+  return { color: "#111111", fontWeight: 700 };
+}
+
 export default function Scorecard({ state, update }) {
   const round = state.activeRound ?? state.rounds[0];
   const [teeKey, setTeeKey] = useState(null);
@@ -49,13 +63,15 @@ export default function Scorecard({ state, update }) {
   const hasYds = round.holes.some((h) => h.yardages);
 
   function scoreInput(n, p) {
+    const strokes = strokesFor(n, p);
     return (
       <td key={n}>
         <input
           className="sc-input num"
           type="number"
           inputMode="numeric"
-          value={strokesFor(n, p) ?? ""}
+          value={strokes ?? ""}
+          style={scoreStyle(strokes, parFor(n))}
           onChange={(e) => {
             const v = parseInt(e.target.value, 10);
             if (!Number.isNaN(v) && v > 0 && v < 20) {
@@ -175,6 +191,33 @@ export default function Scorecard({ state, update }) {
           </tbody>
         </table>
       </div>
+
+      <div
+        style={{
+          marginTop: 10, display: "flex", flexWrap: "wrap", gap: 10,
+          background: "#fdfaf2", borderRadius: 14, padding: "8px 10px",
+        }}
+      >
+        {[
+          { label: "Eagle+", style: scoreStyle(-2, 0) },
+          { label: "Birdie", style: scoreStyle(-1, 0) },
+          { label: "Par", style: scoreStyle(0, 0) },
+          { label: "Bogey", style: scoreStyle(1, 0) },
+          { label: "Double+", style: scoreStyle(2, 0) },
+        ].map(({ label, style }) => (
+          <span key={label} className="small" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <span
+              style={{
+                width: 14, height: 14, borderRadius: style.borderRadius ?? "50%",
+                border: `2px solid ${style.borderColor ?? style.color}`,
+                background: "#fdfaf2",
+              }}
+            />
+            <span style={{ color: style.color, opacity: 0.9 }}>{label}</span>
+          </span>
+        ))}
+      </div>
+
       <p className="small" style={{ opacity: 0.5, marginTop: 10 }}>
         {round.courseId ? ATTRIBUTION : "Par entered as each hole is played — link a course from Home for full yardage and stroke index."}
       </p>
