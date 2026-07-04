@@ -1,6 +1,7 @@
 // "Plays like" = raw distance adjusted for wind and elevation.
 // Weather comes from Open-Meteo (free, no key). If offline, we fall back
 // to raw distance and say so — never invent conditions.
+import { convertWind } from "./units.js";
 
 const CACHE_MS = 15 * 60 * 1000; // one weather fetch per quarter hour is plenty
 let cache = null;
@@ -31,7 +32,7 @@ export async function fetchWeather({ lat, lon }) {
  *  - elevation: 1 yard per yard of rise/fall (a 15 ft uphill shot plays ~5 yds longer)
  *  - temperature: ±1 yard per 10°C from 20°C baseline on a mid-iron
  */
-export function playsLike({ yards, shotBearingDeg, weather, elevationDeltaFt = 0 }) {
+export function playsLike({ yards, shotBearingDeg, weather, elevationDeltaFt = 0, windUnit = "mph" }) {
   if (!weather) {
     return { adjusted: yards, parts: [], note: "No weather — raw yardage" };
   }
@@ -49,7 +50,7 @@ export function playsLike({ yards, shotBearingDeg, weather, elevationDeltaFt = 0
     parts.push({
       label: along >= 0 ? "tailwind" : "headwind",
       yards: Math.round(windAdj),
-      detail: `${Math.round(weather.windMph)} mph`,
+      detail: `${convertWind(weather.windMph, windUnit)} ${windUnit}`,
     });
   }
 

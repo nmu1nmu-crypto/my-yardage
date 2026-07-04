@@ -11,6 +11,7 @@ import {
   roundStats,
 } from "../lib/store.js";
 import { buildMailto, formatRoundText } from "../lib/scorecardEmail.js";
+import { distanceUnit, windUnit, convertDistance, distanceLabel } from "../lib/units.js";
 
 const GREEN_STEPS = [
   { key: "front", label: "front of green" },
@@ -20,6 +21,8 @@ const GREEN_STEPS = [
 
 export default function Round({ state, update, goGames }) {
   const round = state.activeRound;
+  const dUnit = distanceUnit(state);
+  const wUnit = windUnit(state);
   const [clubId, setClubId] = useState(state.bag[4]?.id ?? state.bag[0]?.id);
   const [weather, setWeather] = useState(null);
   const [green, setGreen] = useState({ front: null, middle: null, back: null }); // GPS points the golfer walks and taps once per hole
@@ -50,7 +53,7 @@ export default function Round({ state, update, goGames }) {
     if (distances.middle == null) return null;
     const bearing = bearingDegrees(here, green.middle);
     const elevationDeltaFt = elevationDeltaFeet(here, green.middle);
-    return playsLike({ yards: distances.middle, shotBearingDeg: bearing, weather, elevationDeltaFt });
+    return playsLike({ yards: distances.middle, shotBearingDeg: bearing, weather, elevationDeltaFt, windUnit: wUnit });
   }, [distances.middle, weather, here, green.middle]);
 
   if (!round) {
@@ -150,31 +153,34 @@ export default function Round({ state, update, goGames }) {
             <div className="green-grid">
               <div className="g">
                 <div className="lbl">Front</div>
-                <div className="val num">{distances.front ?? "—"}</div>
+                <div className="val num">{convertDistance(distances.front, dUnit) ?? "—"}</div>
               </div>
               <div className="g active">
                 <div className="lbl">Middle</div>
-                <div className="val num">{distances.middle ?? "—"}</div>
+                <div className="val num">{convertDistance(distances.middle, dUnit) ?? "—"}</div>
               </div>
               <div className="g">
                 <div className="lbl">Back</div>
-                <div className="val num">{distances.back ?? "—"}</div>
+                <div className="val num">{convertDistance(distances.back, dUnit) ?? "—"}</div>
               </div>
             </div>
             <div className="row" style={{ marginTop: 14, alignItems: "flex-end" }}>
-              <span className="small" style={{ opacity: 0.8 }}>Plays like</span>
+              <span className="small" style={{ opacity: 0.8 }}>Plays like ({distanceLabel(dUnit)})</span>
               <span className="num" style={{ fontSize: 32, fontWeight: 600, color: "var(--gold-200)" }}>
-                {adjusted ? adjusted.adjusted : distances.middle ?? "—"}
+                {convertDistance(adjusted ? adjusted.adjusted : distances.middle, dUnit) ?? "—"}
               </span>
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
               {adjusted?.parts.length ? (
-                adjusted.parts.map((p) => (
-                  <span key={p.label} className="chip sky" style={{ height: "auto", padding: "5px 10px" }}>
-                    {p.label} {p.yards > 0 ? "+" : ""}
-                    {p.yards} ({p.detail})
-                  </span>
-                ))
+                adjusted.parts.map((p) => {
+                  const disp = convertDistance(Math.abs(p.yards), dUnit) * Math.sign(p.yards || 1);
+                  return (
+                    <span key={p.label} className="chip sky" style={{ height: "auto", padding: "5px 10px" }}>
+                      {p.label} {disp > 0 ? "+" : ""}
+                      {disp} ({p.detail})
+                    </span>
+                  );
+                })
               ) : (
                 <span className="small" style={{ opacity: 0.75 }}>Calm conditions</span>
               )}
@@ -219,7 +225,7 @@ export default function Round({ state, update, goGames }) {
         </div>
         {avg && (
           <p className="small" style={{ color: "var(--pine-200)", margin: "6px 0 0" }}>
-            {selected.name} carries {avg.yards} yds{" "}
+            {selected.name} carries {convertDistance(avg.yards, dUnit)} {distanceLabel(dUnit)}{" "}
             {avg.tracked ? `on average (${avg.tracked} tracked)` : "(your estimate — track shots to learn it)"}
           </p>
         )}
@@ -242,8 +248,8 @@ export default function Round({ state, update, goGames }) {
           ? `${selected?.short} in flight — GPS is watching the distance`
           : last
             ? last.valid
-              ? `Logged: ${state.bag.find((c) => c.id === last.clubId)?.short} · ${last.yards} yds — added to your averages`
-              : `Ignored a ${last.yards} yd reading (out of range)`
+              ? `Logged: ${state.bag.find((c) => c.id === last.clubId)?.short} · ${convertDistance(last.yards, dUnit)} ${distanceLabel(dUnit)} — added to your averages`
+              : `Ignored a ${convertDistance(last.yards, dUnit)} ${distanceLabel(dUnit)} reading (out of range)`
             : "One tap here, one tap at your ball"}
       </p>
       {msg && <p className="muted small" style={{ textAlign: "center" }}>{msg}</p>}

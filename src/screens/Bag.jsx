@@ -6,18 +6,21 @@ import {
   removeClub,
   setManualYards,
 } from "../lib/store.js";
+import { distanceUnit, convertDistance, distanceLabel, toYards } from "../lib/units.js";
 
 export default function Bag({ state, update }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editing, setEditing] = useState(null); // club id
   const [draftYards, setDraftYards] = useState("");
+  const dUnit = distanceUnit(state);
 
   const inBag = new Set(state.bag.map((c) => c.id));
   const available = CLUB_LIBRARY.filter((c) => !inBag.has(c.id));
 
   function commitEdit(id) {
-    const n = parseInt(draftYards, 10);
-    if (!Number.isNaN(n) && n > 0 && n < 400) update(setManualYards, id, n);
+    const entered = parseInt(draftYards, 10);
+    const yards = toYards(entered, dUnit);
+    if (yards != null && !Number.isNaN(yards) && yards > 0 && yards < 400) update(setManualYards, id, yards);
     setEditing(null);
   }
 
@@ -60,16 +63,17 @@ export default function Bag({ state, update }) {
                       type="number"
                       value={draftYards}
                       onChange={(e) => setDraftYards(e.target.value)}
-                      style={{ height: 34, width: 90 }}
+                      style={{ height: 34, width: 70 }}
                       autoFocus
                     />
+                    <span className="muted small" style={{ alignSelf: "center" }}>{distanceLabel(dUnit)}</span>
                     <button className="chip on" onClick={() => commitEdit(c.id)}>
                       Save
                     </button>
                   </div>
                 ) : (
                   <div className="small num" style={{ color: "var(--pine-200)" }}>
-                    {yards} yds {tracked ? "avg carry" : "estimated"}
+                    {convertDistance(yards, dUnit)} {distanceLabel(dUnit)} {tracked ? "avg carry" : "estimated"}
                   </div>
                 )}
               </div>
@@ -81,7 +85,7 @@ export default function Bag({ state, update }) {
                 aria-label={`Edit ${c.name}`}
                 onClick={() => {
                   setEditing(c.id);
-                  setDraftYards(String(yards));
+                  setDraftYards(String(convertDistance(yards, dUnit)));
                 }}
               >
                 ✎

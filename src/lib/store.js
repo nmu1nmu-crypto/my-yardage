@@ -44,7 +44,13 @@ export const CLUB_LIBRARY = [
 const MAX_CLUBS = 14;
 
 function blank() {
-  return { bag: DEFAULT_BAG, rounds: [], activeRound: null, golfers: {}, profile: { name: "You" } };
+  return {
+    bag: DEFAULT_BAG,
+    rounds: [],
+    activeRound: null,
+    golfers: {},
+    profile: { name: "You", units: { distance: "yards", wind: "mph" } },
+  };
 }
 
 export function load() {
@@ -64,9 +70,11 @@ export function save(state) {
 // No accounts, no login — this is just "who is the primary golfer" so their
 // name/handicap don't need retyping every round, same idea as the bag.
 
-/** Merges any subset of {name, email, emailScorecardOnFinish}. Renaming
- * carries the handicap forward under the new name (best effort — old
- * rounds keep whatever name was typed at the time, unchanged). */
+/** Merges any subset of {name, email, emailScorecardOnFinish, units}.
+ * Renaming carries the handicap forward under the new name (best effort —
+ * old rounds keep whatever name was typed at the time, unchanged). `units`
+ * merges shallowly with the existing units so setting one (e.g. distance)
+ * doesn't clobber the other (e.g. wind). */
 export function setProfile(state, updates) {
   const oldName = state.profile?.name;
   const name = updates.name ?? oldName;
@@ -74,7 +82,8 @@ export function setProfile(state, updates) {
   if (oldName && name && oldName !== name && golfers[oldName] && !golfers[name]) {
     golfers[name] = golfers[oldName];
   }
-  return { ...state, profile: { ...state.profile, ...updates, name }, golfers };
+  const units = { ...state.profile?.units, ...updates.units };
+  return { ...state, profile: { ...state.profile, ...updates, name, units }, golfers };
 }
 
 /** Forgets a saved player's remembered handicap — for trimming the

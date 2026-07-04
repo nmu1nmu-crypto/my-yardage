@@ -3,6 +3,7 @@ import { clubAverage, roundStats, skins, calculatedHandicapIndex, setProfile, re
 import { currentPosition } from "../lib/geo.js";
 import { searchCourses, fetchCourseHoles, fetchCourseTees, ATTRIBUTION } from "../lib/courseApi.js";
 import { buildMailto, formatAllRoundsText } from "../lib/scorecardEmail.js";
+import { distanceUnit, convertDistance, distanceLabel } from "../lib/units.js";
 
 const MAX_PLAYERS = 4;
 const AVG_WINDOWS = [
@@ -14,6 +15,7 @@ const AVG_WINDOWS = [
 
 export default function Home({ state, hero, update, onStartRound }) {
   const profileName = state.profile?.name || "You";
+  const dUnit = distanceUnit(state);
   const [playerBoxes, setPlayerBoxes] = useState([profileName]);
   const [selectedCourse, setSelectedCourse] = useState(null); // { id, name, holes, tees }
   const [selectedTee, setSelectedTee] = useState(null); // { key, name, color, gender, rating, slope }
@@ -31,6 +33,8 @@ export default function Home({ state, hero, update, onStartRound }) {
   const [nameDraft, setNameDraft] = useState(profileName);
   const [emailDraft, setEmailDraft] = useState(state.profile?.email || "");
   const [emailOnFinishDraft, setEmailOnFinishDraft] = useState(!!state.profile?.emailScorecardOnFinish);
+  const [distanceUnitDraft, setDistanceUnitDraft] = useState(state.profile?.units?.distance || "yards");
+  const [windUnitDraft, setWindUnitDraft] = useState(state.profile?.units?.wind || "mph");
   const [importMsg, setImportMsg] = useState("");
   const fileInputRef = useRef(null);
 
@@ -92,6 +96,7 @@ export default function Home({ state, hero, update, onStartRound }) {
       name: trimmed || profileName,
       email: emailDraft.trim(),
       emailScorecardOnFinish: emailOnFinishDraft,
+      units: { distance: distanceUnitDraft, wind: windUnitDraft },
     });
     if (trimmed && trimmed !== profileName) {
       setPlayerBoxes((boxes) => boxes.map((b, i) => (i === 0 && b === profileName ? trimmed : b)));
@@ -200,6 +205,8 @@ export default function Home({ state, hero, update, onStartRound }) {
               setNameDraft(profileName);
               setEmailDraft(state.profile?.email || "");
               setEmailOnFinishDraft(!!state.profile?.emailScorecardOnFinish);
+              setDistanceUnitDraft(state.profile?.units?.distance || "yards");
+              setWindUnitDraft(state.profile?.units?.wind || "mph");
               setImportMsg("");
               setProfileOpen(true);
             }}
@@ -382,7 +389,7 @@ export default function Home({ state, hero, update, onStartRound }) {
                 <div
                   className="bar"
                   style={{ height: `${Math.max(12, (yards / maxYards) * 60)}px` }}
-                  title={`${c.name}: ${yards} yds`}
+                  title={`${c.name}: ${convertDistance(yards, dUnit)} ${distanceLabel(dUnit)}`}
                 />
                 <div className="lbl">{c.short}</div>
               </div>
@@ -533,6 +540,38 @@ export default function Home({ state, hero, update, onStartRound }) {
             >
               {emailOnFinishDraft ? "✓ " : ""}Email me the scorecard when I finish a round
             </button>
+
+            <p className="muted small" style={{ marginTop: 14, marginBottom: 4 }}>Distances</p>
+            <div className="chips">
+              <button
+                className={`chip ${distanceUnitDraft === "yards" ? "on" : ""}`}
+                onClick={() => setDistanceUnitDraft("yards")}
+              >
+                Yards
+              </button>
+              <button
+                className={`chip ${distanceUnitDraft === "meters" ? "on" : ""}`}
+                onClick={() => setDistanceUnitDraft("meters")}
+              >
+                Meters
+              </button>
+            </div>
+
+            <p className="muted small" style={{ marginTop: 10, marginBottom: 4 }}>Wind speed</p>
+            <div className="chips">
+              <button
+                className={`chip ${windUnitDraft === "mph" ? "on" : ""}`}
+                onClick={() => setWindUnitDraft("mph")}
+              >
+                mph
+              </button>
+              <button
+                className={`chip ${windUnitDraft === "kph" ? "on" : ""}`}
+                onClick={() => setWindUnitDraft("kph")}
+              >
+                kph
+              </button>
+            </div>
 
             <p className="muted small" style={{ marginTop: 10 }}>
               No accounts here — this just saves your details on this device, the same way
