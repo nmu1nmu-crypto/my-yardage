@@ -1,9 +1,15 @@
 import { useState } from "react";
-import { clubAverage, roundStats, skins } from "../lib/store.js";
+import { clubAverage, roundStats, skins, calculatedHandicapIndex } from "../lib/store.js";
 import { currentPosition } from "../lib/geo.js";
 import { searchCourses, fetchCourseHoles, fetchCourseTees, ATTRIBUTION } from "../lib/courseApi.js";
 
 const MAX_PLAYERS = 4;
+const AVG_WINDOWS = [
+  { label: "5", n: 5 },
+  { label: "10", n: 10 },
+  { label: "20", n: 20 },
+  { label: "All", n: null },
+];
 
 export default function Home({ state, hero, onStartRound }) {
   const [players, setPlayers] = useState("You");
@@ -16,6 +22,7 @@ export default function Home({ state, hero, onStartRound }) {
   const [results, setResults] = useState([]);
   const [busy, setBusy] = useState(false);
   const [searchMsg, setSearchMsg] = useState("");
+  const [avgWindow, setAvgWindow] = useState(null); // null = all rounds
 
   const recent = state.rounds.slice(0, 4);
 
@@ -26,7 +33,8 @@ export default function Home({ state, hero, onStartRound }) {
   }, 0);
 
   const avgScore = (() => {
-    const full = state.rounds
+    const windowed = avgWindow ? state.rounds.slice(0, avgWindow) : state.rounds;
+    const full = windowed
       .map(roundStats)
       .filter((s) => s.holesPlayed >= 9);
     if (!full.length) return "—";
@@ -35,6 +43,8 @@ export default function Home({ state, hero, onStartRound }) {
       full.length
     ).toFixed(1);
   })();
+
+  const handicapCalc = calculatedHandicapIndex(state.rounds, "You");
 
   const bagPreview = state.bag.slice(0, 8);
   const maxYards = Math.max(...bagPreview.map((c) => clubAverage(c).yards), 1);
@@ -261,6 +271,22 @@ export default function Home({ state, hero, onStartRound }) {
         )}
       </div>
 
+      {state.rounds.length > 1 && (
+        <div className="row" style={{ marginTop: 12, gap: 6, justifyContent: "flex-start" }}>
+          <span className="muted small">Average over</span>
+          {AVG_WINDOWS.map((w) => (
+            <button
+              key={w.label}
+              className={`chip ${avgWindow === w.n ? "on" : ""}`}
+              style={{ padding: "3px 10px" }}
+              onClick={() => setAvgWindow(w.n)}
+            >
+              {w.label}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="metric-row">
         <div className="metric">
           <p className="label">Rounds</p>
@@ -274,6 +300,31 @@ export default function Home({ state, hero, onStartRound }) {
           <p className="label">Skins won</p>
           <p className="value num">£{skinsWon}</p>
         </div>
+      </div>
+
+      <div className="card">
+        <div className="row">
+          <strong style={{ fontSize: 14 }}>Your handicap</strong>
+          {handicapCalc && (
+            <span className="muted small">{handicapCalc.roundsUsed} round{handicapCalc.roundsUsed === 1 ? "" : "s"}</span>
+          )}
+        </div>
+        {handicapCalc ? (
+          <>
+            <p className="value num" style={{ fontSize: 28, margin: "4px 0 0", color: "var(--pine-200)" }}>
+              {handicapCalc.index}
+            </p>
+            <p className="muted small" style={{ margin: "2px 0 0" }}>
+              {handicapCalc.roundsUsed < 3
+                ? "Provisional — plays more rounds with a linked course for a stable estimate."
+                : "Estimated from your linked-course rounds (WHS-style) — not an official handicap."}
+            </p>
+          </>
+        ) : (
+          <p className="muted small" style={{ marginBottom: 0 }}>
+            Link a course with tee ratings when starting a round and complete 18 holes — your handicap calculates itself from there.
+          </p>
+        )}
       </div>
 
       <div className="card">

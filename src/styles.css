@@ -218,6 +218,12 @@ input.sg-input[type="number"] {
   text-align: center; border: 1px solid #e6ddc4; border-radius: 50%;
   background: #ffffff; color: #2b2620; font-size: 11px; font-weight: 700;
 }
+span.sg-input-ro {
+  width: 20px; height: 20px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid #e6ddc4; border-radius: 50%;
+  background: #ffffff; color: #2b2620; font-size: 11px; font-weight: 700;
+}
 .sg-footer {
   display: flex; justify-content: space-between; margin-top: 10px;
   font-size: 12px; color: #857c60;

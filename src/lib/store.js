@@ -172,6 +172,8 @@ export function startRound(state, {
     courseId,
     players: activePlayers,
     handicaps,
+    teeRatingSlope, // kept explicitly (not just baked into courseHandicap) so a
+    // finished round can still be used later to calculate a Handicap Index
     startedAt: new Date().toISOString(),
     // { number, par, strokeIndex, yardages, strokes: {player: n}, shots: [{clubId, yards}] }
     holes: courseHoles
@@ -268,11 +270,22 @@ export function nextHole(state) {
 export function finishRound(state) {
   const r = state.activeRound;
   if (!r) return state;
-  return {
-    ...state,
-    rounds: [{ ...r, finishedAt: new Date().toISOString() }, ...state.rounds],
-    activeRound: null,
-  };
+  const rounds = [{ ...r, finishedAt: new Date().toISOString() }, ...state.rounds];
+
+  // A newly-finished round can bring a player over the 3-round threshold for
+  // a calculated index, or shift an existing one — refresh anyone in this
+  // round who now qualifies. Deliberately conservative: below the threshold
+  // we leave state.golfers untouched rather than overwrite a real index the
+  // golfer typed in from their home club with a thin, noisy estimate.
+  const golfers = { ...state.golfers };
+  for (const p of r.players) {
+    const calc = calculatedHandicapIndex(rounds, p);
+    if (calc != null && calc.roundsUsed >= 3) {
+      golfers[p] = { ...(golfers[p] || {}), handicapIndex: calc.index };
+    }
+  }
+
+  return { ...state, rounds, activeRound: null, golfers };
 }
 
 // ---- games math ---------------------------------------------------------
@@ -338,4 +351,62 @@ export function roundStats(round) {
     holesPlayed += 1;
   }
   return { strokes, toPar: strokes - par, holesPlayed };
+}
+
+// ---- handicap index (calculated) ------------------------------------------
+// This is an estimate for personal tracking, modelled on the World Handicap
+// System — it is not an official/certified handicap, which only a
+// recognised golf association or licensed software can issue.
+
+/** WHS Score Differential for one completed round: (Adjusted Gross Score −
+ * Course Rating) × 113 / Slope. Requires the round to have real course
+ * rating/slope, a computed course handicap for the player, and all 18 holes
+ * scored — otherwise returns null (never estimated from partial data). */
+export function scoreDifferential(round, player) {
+  const trs = round.teeRatingSlope;
+  if (!trs || trs.rating == null || trs.slope == null) return null;
+  const courseHandicap = round.handicaps?.[player]?.courseHandicap;
+  if (courseHandicap == null) return null;
+  if (round.holes.length < 18) return null;
+
+  let adjustedGross = 0;
+  for (const h of round.holes) {
+    const gross = h.strokes?.[player];
+    if (gross == null) return null; // incomplete round — can't use it
+    const strokes = strokesReceived(courseHandicap, h.strokeIndex);
+    const netDoubleBogeyCap = h.par + 2 + Math.max(0, strokes);
+    adjustedGross += Math.min(gross, netDoubleBogeyCap);
+  }
+  return Math.round(((adjustedGross - trs.rating) * 113 / trs.slope) * 10) / 10;
+}
+
+// Official WHS table: for N differentials available (most recent 20 count),
+// how many of the best (lowest) to average, and the adjustment applied.
+const WHS_REVISION_TABLE = [
+  null,
+  { n: 1, adj: -2.0 }, { n: 1, adj: -2.0 }, { n: 1, adj: -1.0 }, { n: 1, adj: -1.0 },
+  { n: 1, adj: 0 }, { n: 2, adj: -1.0 }, { n: 2, adj: 0 }, { n: 2, adj: 0 },
+  { n: 3, adj: -1.0 }, { n: 3, adj: -1.0 }, { n: 3, adj: 0 }, { n: 4, adj: -1.0 },
+  { n: 4, adj: -1.0 }, { n: 4, adj: 0 }, { n: 5, adj: -1.0 }, { n: 5, adj: 0 },
+  { n: 6, adj: 0 }, { n: 6, adj: 0 }, { n: 7, adj: 0 }, { n: 8, adj: 0 },
+];
+
+/** Calculated Handicap Index from a player's finished rounds (most-recent-
+ * first, as state.rounds already is). Returns null if no round qualifies
+ * (needs 18 holes scored + linked course rating/slope), otherwise
+ * { index, roundsUsed } where roundsUsed is how many differentials fed in —
+ * callers can use that to show a "provisional, only N rounds" caveat. */
+export function calculatedHandicapIndex(rounds, player) {
+  const diffs = rounds
+    .filter((r) => r.players.includes(player))
+    .slice(0, 20)
+    .map((r) => scoreDifferential(r, player))
+    .filter((d) => d != null)
+    .sort((a, b) => a - b);
+
+  if (!diffs.length) return null;
+  const entry = WHS_REVISION_TABLE[Math.min(diffs.length, 20)];
+  const used = diffs.slice(0, entry.n);
+  const avg = used.reduce((a, b) => a + b, 0) / used.length;
+  return { index: Math.round((avg + entry.adj) * 10) / 10, roundsUsed: diffs.length };
 }

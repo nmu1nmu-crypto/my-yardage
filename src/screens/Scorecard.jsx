@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { setScoreForHole, strokesReceived } from "../lib/store.js";
 import { ATTRIBUTION } from "../lib/courseApi.js";
+import RoundPicker, { resolveRound } from "../components/RoundPicker.jsx";
 
 const FRONT = Array.from({ length: 9 }, (_, i) => i + 1);
 const BACK = Array.from({ length: 9 }, (_, i) => i + 10);
@@ -24,8 +25,9 @@ function toParLabel(n) {
 }
 
 export default function Scorecard({ state, update }) {
-  const round = state.activeRound ?? state.rounds[0];
+  const [selectedId, setSelectedId] = useState(null);
   const [expanded, setExpanded] = useState(null);
+  const round = resolveRound(state, selectedId);
 
   if (!round) {
     return (
@@ -35,6 +37,8 @@ export default function Scorecard({ state, update }) {
       </div>
     );
   }
+
+  const isCurrent = state.activeRound && round.id === state.activeRound.id;
 
   const holeByNum = Object.fromEntries(round.holes.map((h) => [h.number, h]));
   const parFor = (n) => holeByNum[n]?.par ?? null;
@@ -109,19 +113,25 @@ export default function Scorecard({ state, update }) {
             const circle = scoreCircle(strokes, parFor(n));
             return (
               <span key={n}>
-                <input
-                  className="sg-input num"
-                  type="number"
-                  inputMode="numeric"
-                  value={strokes ?? ""}
-                  style={circle ?? {}}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value, 10);
-                    if (!Number.isNaN(v) && v > 0 && v < 20) {
-                      update(setScoreForHole, n, player, v, parFor(n));
-                    }
-                  }}
-                />
+                {isCurrent ? (
+                  <input
+                    className="sg-input num"
+                    type="number"
+                    inputMode="numeric"
+                    value={strokes ?? ""}
+                    style={circle ?? {}}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value, 10);
+                      if (!Number.isNaN(v) && v > 0 && v < 20) {
+                        update(setScoreForHole, n, player, v, parFor(n));
+                      }
+                    }}
+                  />
+                ) : (
+                  <span className="sg-input sg-input-ro num" style={circle ?? {}}>
+                    {strokes ?? ""}
+                  </span>
+                )}
               </span>
             );
           })}
@@ -155,6 +165,8 @@ export default function Scorecard({ state, update }) {
       </div>
 
       <div className="sg-banner">Stroke Play</div>
+
+      <RoundPicker state={state} selectedId={selectedId} onSelect={setSelectedId} />
 
       <div className="sg-colhead">
         <span style={{ width: 22, textAlign: "center" }}>#</span>

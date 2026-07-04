@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { matchStatus, skins, stableford } from "../lib/store.js";
+import RoundPicker, { resolveRound } from "../components/RoundPicker.jsx";
 
 export default function Games({ state }) {
-  const round = state.activeRound ?? state.rounds[0];
+  const [selectedId, setSelectedId] = useState(null);
+  const round = resolveRound(state, selectedId);
 
   if (!round) {
     return (
@@ -18,15 +21,18 @@ export default function Games({ state }) {
   const played = round.holes.filter((h) =>
     round.players.every((p) => h.strokes[p] != null)
   );
+  const isCurrent = state.activeRound && round.id === state.activeRound.id;
 
   return (
     <>
       <div className="row" style={{ margin: "8px 0 12px" }}>
         <strong style={{ fontSize: 18 }}>Games</strong>
         <span className="muted small">
-          {state.activeRound ? `Thru ${played.length}` : "Last round"}
+          {isCurrent ? `Thru ${played.length}` : round.course}
         </span>
       </div>
+
+      <RoundPicker state={state} selectedId={selectedId} onSelect={setSelectedId} />
 
       {opponent && (
         <div className="card gold">
