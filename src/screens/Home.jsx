@@ -212,7 +212,6 @@ export default function Home({ state, hero, update, onStartRound }) {
           </button>
         </div>
         <p className="eyebrow">Welcome back</p>
-        <h1>Ready when you are</h1>
       </header>
 
       <button className="btn raise" onClick={openCoursePicker}>
