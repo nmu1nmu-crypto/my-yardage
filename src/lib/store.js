@@ -44,7 +44,7 @@ export const CLUB_LIBRARY = [
 const MAX_CLUBS = 14;
 
 function blank() {
-  return { bag: DEFAULT_BAG, rounds: [], activeRound: null };
+  return { bag: DEFAULT_BAG, rounds: [], activeRound: null, golfers: {} };
 }
 
 export function load() {
@@ -104,6 +104,34 @@ export function setManualYards(state, id, yards) {
   };
 }
 
+// ---- handicap math -------------------------------------------------------
+// WHS Course Handicap: how many strokes a player's Handicap Index is worth
+// on this specific course/tee. Needs the tee's Course Rating and Slope —
+// without those, net scoring can't be done correctly, so callers should
+// treat a null result as "show gross only," never guess.
+export function courseHandicapFrom(handicapIndex, slope, rating, par) {
+  if (handicapIndex == null || slope == null || rating == null || par == null) return null;
+  return Math.round(handicapIndex * (slope / 113) + (rating - par));
+}
+
+// Standard stroke-index allocation, extended past 18 (each full 18 strokes
+// adds one stroke to every hole) and to plus-handicappers (negative course
+// handicap gives strokes back to the course, starting from the easiest
+// hole — stroke index 18 — instead of the hardest).
+export function strokesReceived(courseHandicap, strokeIndex) {
+  if (courseHandicap == null || strokeIndex == null) return 0;
+  if (courseHandicap >= 0) {
+    const base = Math.floor(courseHandicap / 18);
+    const remainder = courseHandicap % 18;
+    return base + (strokeIndex <= remainder ? 1 : 0);
+  }
+  const magnitude = Math.abs(courseHandicap);
+  const base = Math.floor(magnitude / 18);
+  const remainder = magnitude % 18;
+  const easiestFirst = 19 - strokeIndex; // SI 18 (easiest) ranks 1st for reduction
+  return -(base + (easiestFirst <= remainder ? 1 : 0));
+}
+
 // ---- rounds and shots ---------------------------------------------------
 
 const MAX_PLAYERS = 4;
@@ -111,12 +139,39 @@ const MAX_PLAYERS = 4;
 // courseHoles (optional): [{ number, par, strokeIndex, yardages }] from a
 // selected course lookup. When absent, holes are created lazily with par 4
 // as each hole is reached — unchanged from the original behaviour.
-export function startRound(state, { course = "New round", courseId = null, courseHoles = null, players = ["You"] } = {}) {
+//
+// handicapIndexes (optional): { player: handicapIndexNumber }. teeRatingSlope
+// (optional): { rating, slope } for the tee the round is played from. Both
+// are needed to compute each player's Course Handicap; when either is
+// missing that player's handicap is left null and net scoring is simply
+// not shown for them — never a guessed or default value.
+export function startRound(state, {
+  course = "New round",
+  courseId = null,
+  courseHoles = null,
+  players = ["You"],
+  handicapIndexes = {},
+  teeRatingSlope = null,
+} = {}) {
+  const activePlayers = players.slice(0, MAX_PLAYERS);
+  const par = courseHoles ? courseHoles.reduce((s, h) => s + (h.par ?? 4), 0) : null;
+
+  const handicaps = Object.fromEntries(
+    activePlayers.map((p) => {
+      const index = handicapIndexes[p] ?? null;
+      const courseHandicap = teeRatingSlope
+        ? courseHandicapFrom(index, teeRatingSlope.slope, teeRatingSlope.rating, par)
+        : null;
+      return [p, { index, courseHandicap }];
+    })
+  );
+
   const round = {
     id: Date.now(),
     course,
     courseId,
-    players: players.slice(0, MAX_PLAYERS),
+    players: activePlayers,
+    handicaps,
     startedAt: new Date().toISOString(),
     // { number, par, strokeIndex, yardages, strokes: {player: n}, shots: [{clubId, yards}] }
     holes: courseHoles
@@ -132,7 +187,13 @@ export function startRound(state, { course = "New round", courseId = null, cours
     currentHole: 1,
     pendingShot: null, // { clubId, start:{lat,lon}, at }
   };
-  return { ...state, activeRound: round };
+
+  const golfers = { ...state.golfers };
+  for (const p of activePlayers) {
+    if (handicapIndexes[p] != null) golfers[p] = { handicapIndex: handicapIndexes[p] };
+  }
+
+  return { ...state, activeRound: round, golfers };
 }
 
 export function markShotStart(state, clubId, position) {

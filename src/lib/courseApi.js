@@ -45,3 +45,22 @@ export async function fetchCourseHoles(courseId) {
     return [];
   }
 }
+
+/** Tee sets (course rating + slope, needed for Course Handicap), or []. */
+export async function fetchCourseTees(courseId) {
+  try {
+    const data = await getJson(`${BASE}/courses/${courseId}/tees`);
+    return (data.tees ?? []).map((t) => ({
+      key: t.tee_key,
+      name: t.tee_name,
+      color: t.tee_color,
+      gender: t.gender,
+      rating: t.course_rating ?? null,
+      slope: t.slope ?? null,
+      par: t.par ?? null,
+      yardage: t.yardage ?? null,
+    }));
+  } catch {
+    return [];
+  }
+}

@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { clubAverage, roundStats, skins } from "../lib/store.js";
 import { currentPosition } from "../lib/geo.js";
-import { searchCourses, fetchCourseHoles, ATTRIBUTION } from "../lib/courseApi.js";
+import { searchCourses, fetchCourseHoles, fetchCourseTees, ATTRIBUTION } from "../lib/courseApi.js";
 
 const MAX_PLAYERS = 4;
 
 export default function Home({ state, hero, onStartRound }) {
   const [players, setPlayers] = useState("You");
   const [courseName, setCourseName] = useState("");
-  const [selectedCourse, setSelectedCourse] = useState(null); // { id, name, holes }
+  const [selectedCourse, setSelectedCourse] = useState(null); // { id, name, holes, tees }
+  const [selectedTee, setSelectedTee] = useState(null); // { key, name, color, gender, rating, slope }
+  const [handicaps, setHandicaps] = useState({}); // { playerName: indexString }
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState([]);
@@ -37,6 +39,7 @@ export default function Home({ state, hero, onStartRound }) {
   const bagPreview = state.bag.slice(0, 8);
   const maxYards = Math.max(...bagPreview.map((c) => clubAverage(c).yards), 1);
   const trackedTotal = state.bag.reduce((s, c) => s + c.shots.length, 0);
+  const playerNames = players.split(",").map((p) => p.trim()).filter(Boolean).slice(0, MAX_PLAYERS);
   const playerCount = players.split(",").map((p) => p.trim()).filter(Boolean).length;
 
   async function runSearch(q) {
@@ -66,16 +69,26 @@ export default function Home({ state, hero, onStartRound }) {
     setCourseName(c.name);
     setSearchOpen(false);
     setResults([]);
-    const holes = await fetchCourseHoles(c.id);
-    setSelectedCourse({ id: c.id, name: c.name, holes: holes.length ? holes : null });
+    setSelectedTee(null);
+    const [holes, tees] = await Promise.all([fetchCourseHoles(c.id), fetchCourseTees(c.id)]);
+    setSelectedCourse({ id: c.id, name: c.name, holes: holes.length ? holes : null, tees });
+    const withRatings = tees.filter((t) => t.rating != null && t.slope != null);
+    if (withRatings.length) setSelectedTee(withRatings[0]);
   }
 
   function start() {
+    const handicapIndexes = Object.fromEntries(
+      playerNames
+        .map((p) => [p, parseFloat(handicaps[p] ?? state.golfers?.[p]?.handicapIndex ?? "")])
+        .filter(([, v]) => !Number.isNaN(v))
+    );
     onStartRound({
-      players: players.split(",").map((p) => p.trim()).filter(Boolean),
+      players: playerNames,
       course: courseName.trim() || "New round",
       courseId: selectedCourse?.id ?? null,
       courseHoles: selectedCourse?.holes ?? null,
+      handicapIndexes,
+      teeRatingSlope: selectedTee ? { rating: selectedTee.rating, slope: selectedTee.slope } : null,
     });
   }
 
@@ -128,6 +141,27 @@ export default function Home({ state, hero, onStartRound }) {
           <p className="small" style={{ color: "var(--pine-200)", margin: "6px 0 0" }}>
             ✓ Par/yardage loaded for {selectedCourse.holes.length} holes
           </p>
+        )}
+
+        {selectedCourse?.tees?.some((t) => t.rating != null && t.slope != null) && (
+          <div style={{ marginTop: 8 }}>
+            <p className="muted small" style={{ marginBottom: 4 }}>
+              Tee (for handicap calculation)
+            </p>
+            <div className="chips">
+              {selectedCourse.tees
+                .filter((t) => t.rating != null && t.slope != null)
+                .map((t) => (
+                  <button
+                    key={t.key}
+                    className={`chip ${selectedTee?.key === t.key ? "on" : ""}`}
+                    onClick={() => setSelectedTee(t)}
+                  >
+                    {t.name} {t.gender ? `(${t.gender[0]})` : ""} · {t.rating}/{t.slope}
+                  </button>
+                ))}
+            </div>
+          </div>
         )}
 
         {searchOpen && (
@@ -202,6 +236,28 @@ export default function Home({ state, hero, onStartRound }) {
           <p className="small" style={{ color: "var(--gold-200)", margin: "6px 0 0" }}>
             Only the first {MAX_PLAYERS} will be added to the round.
           </p>
+        )}
+
+        {playerNames.length > 0 && (
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--line)" }}>
+            <p className="muted small" style={{ marginBottom: 6 }}>
+              Handicap index (optional — enables net scoring on the Scorecard)
+            </p>
+            {playerNames.map((p) => (
+              <div key={p} className="row" style={{ gap: 8, marginTop: 6 }}>
+                <span style={{ fontSize: 13, flex: 1 }}>{p}</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  value={handicaps[p] ?? state.golfers?.[p]?.handicapIndex ?? ""}
+                  onChange={(e) => setHandicaps((h) => ({ ...h, [p]: e.target.value }))}
+                  placeholder="e.g. 14.2"
+                  style={{ width: 90, height: 36 }}
+                />
+              </div>
+            ))}
+          </div>
         )}
       </div>
 

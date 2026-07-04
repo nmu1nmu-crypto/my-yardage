@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { setScoreForHole } from "../lib/store.js";
+import { setScoreForHole, strokesReceived } from "../lib/store.js";
 import { ATTRIBUTION } from "../lib/courseApi.js";
 
 const FRONT = Array.from({ length: 9 }, (_, i) => i + 1);
@@ -40,6 +40,13 @@ export default function Scorecard({ state, update }) {
   const parFor = (n) => holeByNum[n]?.par ?? null;
   const siFor = (n) => holeByNum[n]?.strokeIndex ?? null;
   const strokesFor = (n, p) => holeByNum[n]?.strokes?.[p] ?? null;
+  const courseHandicapFor = (p) => round.handicaps?.[p]?.courseHandicap ?? null;
+  const netStrokesFor = (n, p) => {
+    const gross = strokesFor(n, p);
+    const ch = courseHandicapFor(p);
+    if (gross == null || ch == null || siFor(n) == null) return null;
+    return gross - strokesReceived(ch, siFor(n));
+  };
 
   function sumRange(getter, nums) {
     const vals = nums.map(getter).filter((v) => v != null);
@@ -52,10 +59,12 @@ export default function Scorecard({ state, update }) {
   function summaryFor(p) {
     const played = [...FRONT, ...BACK].filter((n) => strokesFor(n, p) != null);
     const thru = played.length;
-    if (!thru) return { thru: 0, score: null, toPar: null };
+    if (!thru) return { thru: 0, score: null, toPar: null, net: null };
     const score = sumRange((n) => strokesFor(n, p), played);
     const parPlayed = sumRange(parFor, played);
-    return { thru, score, toPar: parPlayed != null ? score - parPlayed : null };
+    const hasNet = courseHandicapFor(p) != null && hasSi;
+    const net = hasNet ? sumRange((n) => netStrokesFor(n, p), played) : null;
+    return { thru, score, toPar: parPlayed != null ? score - parPlayed : null, net };
   }
 
   const ranked = round.players
@@ -118,6 +127,15 @@ export default function Scorecard({ state, update }) {
           })}
           <span className="sg-row-sum num">{sumRange((n) => strokesFor(n, player), holeNums) ?? "–"}</span>
         </div>
+        {courseHandicapFor(player) != null && hasSi && (
+          <div className="sg-row sg-net-row">
+            <span className="sg-row-label">Net</span>
+            {holeNums.map((n) => (
+              <span key={n}>{netStrokesFor(n, player) ?? "–"}</span>
+            ))}
+            <span className="sg-row-sum num">{sumRange((n) => netStrokesFor(n, player), holeNums) ?? "–"}</span>
+          </div>
+        )}
       </>
     );
   }
@@ -146,14 +164,16 @@ export default function Scorecard({ state, update }) {
         <span style={{ minWidth: 26, textAlign: "right" }}>Thru</span>
       </div>
 
-      {ranked.map(({ p, thru, score, toPar }, i) => {
+      {ranked.map(({ p, thru, score, toPar, net }, i) => {
         const isOpen = expanded === p;
+        const ch = courseHandicapFor(p);
         return (
           <div key={p} className={`sg-card ${isOpen ? "open" : ""}`}>
             <button className="sg-summary" onClick={() => setExpanded(isOpen ? null : p)}>
               <span className="sg-rank">{i + 1}</span>
-              <span style={{ flex: 1 }} className="sg-name">
-                {p}
+              <span style={{ flex: 1 }}>
+                <div className="sg-name">{p}</div>
+                {ch != null && <div className="sg-hcp">HCP {ch}</div>}
               </span>
               <span className="sg-score num">{score ?? "–"}</span>
               <span className={`sg-topar num ${toPar != null && toPar < 0 ? "good" : ""}`}>
@@ -170,7 +190,7 @@ export default function Scorecard({ state, update }) {
                     Par <strong className="num">{totalPar ?? "–"}</strong>
                   </span>
                   <span>
-                    Score <strong className="num">{score ?? "–"}</strong>
+                    Score <strong className="num">{score ?? "–"}{net != null ? `/${net}` : ""}</strong>
                   </span>
                   <span>
                     Position <strong className="num">{thru ? `${i + 1}.` : "–"}</strong>
