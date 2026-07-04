@@ -150,11 +150,12 @@ body {
 .green-grid .g .val { font-size: 22px; font-weight: 600; margin-top: 2px; }
 .green-grid .g.active .val { color: var(--sky-400); }
 
-input[type="number"], input[type="text"] {
+input[type="number"], input[type="text"], input[type="email"], select {
   width: 100%; height: 44px; padding: 0 12px;
   border: 1px solid var(--line); border-radius: 10px;
   font: 400 15px var(--font-ui); background: var(--card); color: var(--ink);
 }
+select { appearance: none; -webkit-appearance: none; }
 
 /* Scorecard — expandable per-player cards, GolfGameBook-style: green
    band headers, black column bar, white/grey cards, filled score circles. */

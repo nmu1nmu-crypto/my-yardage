@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
-import { clubAverage, roundStats, skins, calculatedHandicapIndex, setProfile, exportData, importData, replaceState } from "../lib/store.js";
+import { clubAverage, roundStats, skins, calculatedHandicapIndex, setProfile, removeGolfer, exportData, importData, replaceState } from "../lib/store.js";
 import { currentPosition } from "../lib/geo.js";
 import { searchCourses, fetchCourseHoles, fetchCourseTees, ATTRIBUTION } from "../lib/courseApi.js";
+import { buildMailto, formatAllRoundsText } from "../lib/scorecardEmail.js";
 
 const MAX_PLAYERS = 4;
 const AVG_WINDOWS = [
@@ -13,11 +14,12 @@ const AVG_WINDOWS = [
 
 export default function Home({ state, hero, update, onStartRound }) {
   const profileName = state.profile?.name || "You";
-  const [players, setPlayers] = useState(profileName);
+  const [playerBoxes, setPlayerBoxes] = useState([profileName]);
   const [selectedCourse, setSelectedCourse] = useState(null); // { id, name, holes, tees }
   const [selectedTee, setSelectedTee] = useState(null); // { key, name, color, gender, rating, slope }
   const [handicaps, setHandicaps] = useState({}); // { playerName: indexString }
   const [avgWindow, setAvgWindow] = useState(null); // null = all rounds
+  const [managingPlayers, setManagingPlayers] = useState(false);
 
   const [pickingCourse, setPickingCourse] = useState(false);
   const [nearby, setNearby] = useState([]);
@@ -27,6 +29,8 @@ export default function Home({ state, hero, update, onStartRound }) {
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState(profileName);
+  const [emailDraft, setEmailDraft] = useState(state.profile?.email || "");
+  const [emailOnFinishDraft, setEmailOnFinishDraft] = useState(!!state.profile?.emailScorecardOnFinish);
   const [importMsg, setImportMsg] = useState("");
   const fileInputRef = useRef(null);
 
@@ -55,31 +59,52 @@ export default function Home({ state, hero, update, onStartRound }) {
   const bagPreview = state.bag.slice(0, 8);
   const maxYards = Math.max(...bagPreview.map((c) => clubAverage(c).yards), 1);
   const trackedTotal = state.bag.reduce((s, c) => s + c.shots.length, 0);
-  const playerNames = players.split(",").map((p) => p.trim()).filter(Boolean).slice(0, MAX_PLAYERS);
-  const playerCount = players.split(",").map((p) => p.trim()).filter(Boolean).length;
+  const playerNames = playerBoxes.map((p) => p.trim()).filter(Boolean).slice(0, MAX_PLAYERS);
   const knownPlayers = Object.keys(state.golfers || {})
     .filter((n) => !playerNames.includes(n))
     .sort();
 
+  function updateBox(i, value) {
+    setPlayerBoxes((boxes) => boxes.map((b, idx) => (idx === i ? value : b)));
+  }
+
+  function addBox() {
+    setPlayerBoxes((boxes) => (boxes.length < MAX_PLAYERS ? [...boxes, ""] : boxes));
+  }
+
+  function removeBox(i) {
+    setPlayerBoxes((boxes) => (boxes.length > 1 ? boxes.filter((_, idx) => idx !== i) : boxes));
+  }
+
   function addKnownPlayer(name) {
-    if (playerNames.length >= MAX_PLAYERS) return;
-    const current = players.split(",").map((p) => p.trim()).filter(Boolean);
-    setPlayers([...current, name].join(", "));
+    if (!name) return;
+    setPlayerBoxes((boxes) => {
+      const emptyIdx = boxes.findIndex((b) => !b.trim());
+      if (emptyIdx >= 0) return boxes.map((b, idx) => (idx === emptyIdx ? name : b));
+      if (boxes.length < MAX_PLAYERS) return [...boxes, name];
+      return boxes;
+    });
   }
 
   function saveProfile() {
     const trimmed = nameDraft.trim();
-    if (trimmed) {
-      update(setProfile, { name: trimmed });
-      // Reflect the rename in the current "playing with" field if it still
-      // has the old default name queued up as the first player.
-      setPlayers((p) => {
-        const parts = p.split(",").map((x) => x.trim());
-        if (parts[0] === profileName) parts[0] = trimmed;
-        return parts.join(", ");
-      });
+    update(setProfile, {
+      name: trimmed || profileName,
+      email: emailDraft.trim(),
+      emailScorecardOnFinish: emailOnFinishDraft,
+    });
+    if (trimmed && trimmed !== profileName) {
+      setPlayerBoxes((boxes) => boxes.map((b, i) => (i === 0 && b === profileName ? trimmed : b)));
     }
     setProfileOpen(false);
+  }
+
+  function emailAllScorecards() {
+    window.location.href = buildMailto({
+      to: state.profile?.email || "",
+      subject: "My Yardage — all scorecards",
+      body: formatAllRoundsText(state.rounds, profileName),
+    });
   }
 
   function doExport() {
@@ -173,6 +198,8 @@ export default function Home({ state, hero, update, onStartRound }) {
             style={{ background: "rgba(255,255,255,0.14)", border: "none", color: "var(--pine-50)" }}
             onClick={() => {
               setNameDraft(profileName);
+              setEmailDraft(state.profile?.email || "");
+              setEmailOnFinishDraft(!!state.profile?.emailScorecardOnFinish);
               setImportMsg("");
               setProfileOpen(true);
             }}
@@ -189,34 +216,75 @@ export default function Home({ state, hero, update, onStartRound }) {
       </button>
 
       <div className="card" style={{ marginTop: 14 }}>
-        <label className="muted small" htmlFor="players">
-          Playing with (comma-separated — first name is you, up to {MAX_PLAYERS})
+        <label className="muted small">
+          Playing with (up to {MAX_PLAYERS})
         </label>
-        <input
-          id="players"
-          type="text"
-          value={players}
-          onChange={(e) => setPlayers(e.target.value)}
-          placeholder="You, Dave, Raj"
-          style={{ marginTop: 6 }}
-        />
-        {playerCount > MAX_PLAYERS && (
-          <p className="small" style={{ color: "var(--gold-200)", margin: "6px 0 0" }}>
-            Only the first {MAX_PLAYERS} will be added to the round.
-          </p>
+
+        {playerBoxes.map((box, i) => (
+          <div key={i} className="row" style={{ gap: 6, marginTop: 6 }}>
+            <input
+              type="text"
+              value={box}
+              onChange={(e) => updateBox(i, e.target.value)}
+              placeholder={i === 0 ? profileName : `Player ${i + 1}`}
+            />
+            {playerBoxes.length > 1 && (
+              <button className="chip" style={{ flexShrink: 0 }} onClick={() => removeBox(i)} aria-label="Remove player">
+                ✕
+              </button>
+            )}
+          </div>
+        ))}
+
+        {playerBoxes.length < MAX_PLAYERS && (
+          <button className="btn ghost" style={{ marginTop: 8, height: 40 }} onClick={addBox}>
+            + Add player
+          </button>
         )}
 
         {knownPlayers.length > 0 && playerNames.length < MAX_PLAYERS && (
-          <div style={{ marginTop: 8 }}>
-            <p className="muted small" style={{ marginBottom: 4 }}>Previously played with</p>
-            <div className="chips">
-              {knownPlayers.map((n) => (
-                <button key={n} className="chip" onClick={() => addKnownPlayer(n)}>
-                  + {n}
-                  {state.golfers[n]?.handicapIndex != null ? ` (${state.golfers[n].handicapIndex})` : ""}
-                </button>
-              ))}
+          <div style={{ marginTop: 10 }}>
+            <div className="row">
+              <p className="muted small" style={{ marginBottom: 0 }}>Previously played with</p>
+              <button
+                className="small"
+                style={{ background: "none", border: "none", color: "var(--pine-200)", cursor: "pointer", padding: 0 }}
+                onClick={() => setManagingPlayers((m) => !m)}
+              >
+                {managingPlayers ? "Done" : "Manage"}
+              </button>
             </div>
+            {managingPlayers ? (
+              <div style={{ marginTop: 6 }}>
+                {knownPlayers.map((n) => (
+                  <div key={n} className="list-row row">
+                    <span style={{ fontSize: 13 }}>
+                      {n}{state.golfers[n]?.handicapIndex != null ? ` (${state.golfers[n].handicapIndex})` : ""}
+                    </span>
+                    <button
+                      className="chip"
+                      style={{ color: "var(--clay-500)" }}
+                      onClick={() => update(removeGolfer, n)}
+                    >
+                      🗑 Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <select
+                value=""
+                onChange={(e) => addKnownPlayer(e.target.value)}
+                style={{ marginTop: 6 }}
+              >
+                <option value="" disabled>+ Add a previous player…</option>
+                {knownPlayers.map((n) => (
+                  <option key={n} value={n}>
+                    {n}{state.golfers[n]?.handicapIndex != null ? ` (${state.golfers[n].handicapIndex})` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         )}
 
@@ -449,13 +517,41 @@ export default function Home({ state, hero, update, onStartRound }) {
               onChange={(e) => setNameDraft(e.target.value)}
               placeholder="You"
             />
+
+            <p className="muted small" style={{ marginTop: 10, marginBottom: 4 }}>Your email</p>
+            <input
+              type="email"
+              value={emailDraft}
+              onChange={(e) => setEmailDraft(e.target.value)}
+              placeholder="you@example.com"
+            />
+
+            <button
+              className={`chip ${emailOnFinishDraft ? "on" : ""}`}
+              style={{ marginTop: 10, width: "100%", justifyContent: "center" }}
+              onClick={() => setEmailOnFinishDraft((v) => !v)}
+            >
+              {emailOnFinishDraft ? "✓ " : ""}Email me the scorecard when I finish a round
+            </button>
+
             <p className="muted small" style={{ marginTop: 10 }}>
-              No accounts here — this just saves your name and handicap on this device, the
-              same way your bag already does, so you don't have to retype them every round.
+              No accounts here — this just saves your details on this device, the same way
+              your bag already does, so you don't have to retype them every round. Emailing
+              opens your phone's Mail app with everything filled in — you still tap send.
             </p>
             <button className="btn pine" style={{ marginTop: 12 }} onClick={saveProfile}>
               Save
             </button>
+
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
+              <strong style={{ fontSize: 14 }}>All scorecards</strong>
+              <p className="muted small" style={{ marginTop: 4 }}>
+                Email a compact summary of every round you've played ({state.rounds.length} so far).
+              </p>
+              <button className="btn ghost" style={{ marginTop: 8, height: 44 }} onClick={emailAllScorecards}>
+                ✉ Email all scorecards
+              </button>
+            </div>
 
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
               <strong style={{ fontSize: 14 }}>Backup</strong>

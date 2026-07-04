@@ -64,15 +64,25 @@ export function save(state) {
 // No accounts, no login — this is just "who is the primary golfer" so their
 // name/handicap don't need retyping every round, same idea as the bag.
 
-/** Renaming carries the handicap forward under the new name (best effort —
- * old rounds keep whatever name was typed at the time, unchanged). */
-export function setProfile(state, { name }) {
+/** Merges any subset of {name, email, emailScorecardOnFinish}. Renaming
+ * carries the handicap forward under the new name (best effort — old
+ * rounds keep whatever name was typed at the time, unchanged). */
+export function setProfile(state, updates) {
   const oldName = state.profile?.name;
+  const name = updates.name ?? oldName;
   const golfers = { ...state.golfers };
   if (oldName && name && oldName !== name && golfers[oldName] && !golfers[name]) {
     golfers[name] = golfers[oldName];
   }
-  return { ...state, profile: { ...state.profile, name }, golfers };
+  return { ...state, profile: { ...state.profile, ...updates, name }, golfers };
+}
+
+/** Forgets a saved player's remembered handicap — for trimming the
+ * "previously played with" list, not anything to do with round history. */
+export function removeGolfer(state, name) {
+  const golfers = { ...state.golfers };
+  delete golfers[name];
+  return { ...state, golfers };
 }
 
 export function exportData(state) {

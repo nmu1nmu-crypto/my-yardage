@@ -10,6 +10,7 @@ import {
   finishRound,
   roundStats,
 } from "../lib/store.js";
+import { buildMailto, formatRoundText } from "../lib/scorecardEmail.js";
 
 const GREEN_STEPS = [
   { key: "front", label: "front of green" },
@@ -283,7 +284,17 @@ export default function Round({ state, update, goGames }) {
         <button
           className="btn ghost"
           style={{ marginTop: 8, borderStyle: "solid" }}
-          onClick={() => update(finishRound)}
+          onClick={() => {
+            const profile = state.profile;
+            if (profile?.emailScorecardOnFinish && profile?.email) {
+              window.location.href = buildMailto({
+                to: profile.email,
+                subject: `Scorecard — ${round.course}`,
+                body: formatRoundText(round),
+              });
+            }
+            update(finishRound);
+          }}
         >
           Finish round
         </button>
