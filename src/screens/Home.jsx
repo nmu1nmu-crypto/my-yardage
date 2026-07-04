@@ -347,31 +347,6 @@ export default function Home({ state, hero, update, onStartRound }) {
 
       <div className="card">
         <div className="row">
-          <strong style={{ fontSize: 14 }}>Your handicap</strong>
-          {handicapCalc && (
-            <span className="muted small">{handicapCalc.roundsUsed} round{handicapCalc.roundsUsed === 1 ? "" : "s"}</span>
-          )}
-        </div>
-        {handicapCalc ? (
-          <>
-            <p className="value num" style={{ fontSize: 28, margin: "4px 0 0", color: "var(--pine-200)" }}>
-              {handicapCalc.index}
-            </p>
-            <p className="muted small" style={{ margin: "2px 0 0" }}>
-              {handicapCalc.roundsUsed < 3
-                ? "Provisional — plays more rounds with a linked course for a stable estimate."
-                : "Estimated from your linked-course rounds (WHS-style) — not an official handicap."}
-            </p>
-          </>
-        ) : (
-          <p className="muted small" style={{ marginBottom: 0 }}>
-            Link a course with tee ratings when starting a round and complete 18 holes — your handicap calculates itself from there.
-          </p>
-        )}
-      </div>
-
-      <div className="card">
-        <div className="row">
           <strong style={{ fontSize: 14 }}>Your bag</strong>
           <span className="small" style={{ color: "var(--pine-200)" }}>
             {trackedTotal} shots tracked
@@ -579,6 +554,31 @@ export default function Home({ state, hero, update, onStartRound }) {
             <button className="btn pine" style={{ marginTop: 12 }} onClick={saveProfile}>
               Save
             </button>
+
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
+              <div className="row">
+                <strong style={{ fontSize: 14 }}>Your handicap</strong>
+                {handicapCalc && (
+                  <span className="muted small">{handicapCalc.roundsUsed} round{handicapCalc.roundsUsed === 1 ? "" : "s"}</span>
+                )}
+              </div>
+              {handicapCalc ? (
+                <>
+                  <p className="value num" style={{ fontSize: 28, margin: "4px 0 0", color: "var(--pine-200)" }}>
+                    {handicapCalc.index}
+                  </p>
+                  <p className="muted small" style={{ margin: "2px 0 0" }}>
+                    {handicapCalc.roundsUsed < 3
+                      ? "Provisional — plays more rounds with a linked course for a stable estimate."
+                      : "Estimated from your linked-course rounds (WHS-style) — not an official handicap."}
+                  </p>
+                </>
+              ) : (
+                <p className="muted small" style={{ marginBottom: 0 }}>
+                  Link a course with tee ratings when starting a round and complete 18 holes — your handicap calculates itself from there.
+                </p>
+              )}
+            </div>
 
             <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
               <strong style={{ fontSize: 14 }}>All scorecards</strong>

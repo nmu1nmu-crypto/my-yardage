@@ -27,8 +27,13 @@
 
 * { box-sizing: border-box; }
 
-body {
+html, body {
   margin: 0;
+  overflow-x: hidden;
+  width: 100%;
+}
+
+body {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-ui);
@@ -42,9 +47,10 @@ body {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
 }
 
-.screen { flex: 1; padding: 16px 16px 88px; }
+.screen { flex: 1; padding: 16px 16px 96px; overflow-x: hidden; }
 
 /* Numbers are the product — they get their own face */
 .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
@@ -55,7 +61,7 @@ body {
   background-position: center;
   color: var(--pine-50);
   margin: -16px -16px 0;
-  padding: 20px 16px 40px;
+  padding: calc(20px + env(safe-area-inset-top)) 16px 56px;
 }
 .hero .eyebrow { color: var(--pine-100); font-size: 13px; margin: 0; }
 .hero h1 { font-size: 22px; font-weight: 600; margin: 4px 0 0; }
@@ -128,7 +134,8 @@ body {
   width: 100%; max-width: 430px;
   display: grid; grid-template-columns: repeat(5, 1fr);
   background: var(--card); border-top: 1px solid var(--line);
-  padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+  padding: 8px 0 max(10px, env(safe-area-inset-bottom));
+  z-index: 40;
 }
 .tabbar button {
   border: none; background: none; cursor: pointer;
@@ -136,7 +143,7 @@ body {
   display: grid; gap: 2px; justify-items: center; padding: 4px 0;
 }
 .tabbar button.on { color: var(--pine-400); }
-.tabbar .glyph { font-size: 18px; line-height: 1; }
+.tabbar .glyph { font-size: 23px; line-height: 1; }
 
 .clubbar { display: flex; align-items: flex-end; gap: 5px; height: 74px; margin-top: 8px; }
 .clubbar .col { flex: 1; text-align: center; }
