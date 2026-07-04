@@ -32,7 +32,6 @@ export default function Home({ state, hero, update, onStartRound }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState(profileName);
   const [emailDraft, setEmailDraft] = useState(state.profile?.email || "");
-  const [emailOnFinishDraft, setEmailOnFinishDraft] = useState(!!state.profile?.emailScorecardOnFinish);
   const [distanceUnitDraft, setDistanceUnitDraft] = useState(state.profile?.units?.distance || "yards");
   const [windUnitDraft, setWindUnitDraft] = useState(state.profile?.units?.wind || "mph");
   const [importMsg, setImportMsg] = useState("");
@@ -95,7 +94,6 @@ export default function Home({ state, hero, update, onStartRound }) {
     update(setProfile, {
       name: trimmed || profileName,
       email: emailDraft.trim(),
-      emailScorecardOnFinish: emailOnFinishDraft,
       units: { distance: distanceUnitDraft, wind: windUnitDraft },
     });
     if (trimmed && trimmed !== profileName) {
@@ -204,7 +202,6 @@ export default function Home({ state, hero, update, onStartRound }) {
             onClick={() => {
               setNameDraft(profileName);
               setEmailDraft(state.profile?.email || "");
-              setEmailOnFinishDraft(!!state.profile?.emailScorecardOnFinish);
               setDistanceUnitDraft(state.profile?.units?.distance || "yards");
               setWindUnitDraft(state.profile?.units?.wind || "mph");
               setImportMsg("");
@@ -533,13 +530,15 @@ export default function Home({ state, hero, update, onStartRound }) {
               placeholder="you@example.com"
             />
 
-            <button
-              className={`chip ${emailOnFinishDraft ? "on" : ""}`}
-              style={{ marginTop: 10, width: "100%", justifyContent: "center" }}
-              onClick={() => setEmailOnFinishDraft((v) => !v)}
-            >
-              {emailOnFinishDraft ? "✓ " : ""}Email me the scorecard when I finish a round
-            </button>
+            <label className="row" style={{ marginTop: 12, gap: 8, cursor: "pointer", justifyContent: "flex-start" }}>
+              <input
+                type="checkbox"
+                checked={!!state.profile?.emailScorecardOnFinish}
+                onChange={(e) => update(setProfile, { emailScorecardOnFinish: e.target.checked })}
+                style={{ width: 18, height: 18, flexShrink: 0 }}
+              />
+              <span style={{ fontSize: 14 }}>Email me the scorecard when I finish a round</span>
+            </label>
 
             <p className="muted small" style={{ marginTop: 14, marginBottom: 4 }}>Distances</p>
             <div className="chips">

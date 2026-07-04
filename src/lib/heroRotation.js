@@ -1,20 +1,18 @@
-// Rotates the login/home hero illustration each time the app is opened.
+// Rotates the login/home hero photo each time the app is opened.
 // Sequential + wrapping (not random) so the set is seen in full before repeating.
 // No server involved — images ship in the app bundle, index lives in localStorage.
-import sunrise from "../assets/hero/hero-sunrise.svg";
-import sunshine from "../assets/hero/hero-sunshine.svg";
-import dramatic from "../assets/hero/hero-dramatic.svg";
-import goldenHour from "../assets/hero/hero-golden-hour.svg";
-import overcast from "../assets/hero/hero-overcast.svg";
-import dusk from "../assets/hero/hero-dusk.svg";
+import sunsetGreen from "../assets/hero-photos/hero-photo-1.jpg";
+import ballAtHole from "../assets/hero-photos/hero-photo-2.jpg";
+import teeByThePond from "../assets/hero-photos/hero-photo-3.jpg";
+import aerialBunkers from "../assets/hero-photos/hero-photo-4.jpg";
+import dunesAndMountains from "../assets/hero-photos/hero-photo-6.jpg";
 
 export const HERO_IMAGES = [
-  { id: "sunrise", src: sunrise, label: "Sunrise" },
-  { id: "sunshine", src: sunshine, label: "Sunshine" },
-  { id: "dramatic", src: dramatic, label: "Dramatic sky" },
-  { id: "golden-hour", src: goldenHour, label: "Golden hour" },
-  { id: "overcast", src: overcast, label: "Overcast" },
-  { id: "dusk", src: dusk, label: "Dusk" },
+  { id: "sunset-green", src: sunsetGreen, label: "Sunset green" },
+  { id: "ball-at-hole", src: ballAtHole, label: "Ball at the hole" },
+  { id: "tee-by-the-pond", src: teeByThePond, label: "Tee by the pond" },
+  { id: "aerial-bunkers", src: aerialBunkers, label: "Aerial bunkers" },
+  { id: "dunes-and-mountains", src: dunesAndMountains, label: "Dunes and mountains" },
 ];
 
 const KEY = "my-yardage-hero-index";
