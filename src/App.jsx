@@ -29,6 +29,7 @@ export default function App() {
       <Home
         state={state}
         hero={hero}
+        update={update}
         onStartRound={(opts) => {
           update(store.startRound, opts);
           setTab("round");

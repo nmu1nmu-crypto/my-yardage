@@ -44,7 +44,7 @@ export const CLUB_LIBRARY = [
 const MAX_CLUBS = 14;
 
 function blank() {
-  return { bag: DEFAULT_BAG, rounds: [], activeRound: null, golfers: {} };
+  return { bag: DEFAULT_BAG, rounds: [], activeRound: null, golfers: {}, profile: { name: "You" } };
 }
 
 export function load() {
@@ -58,6 +58,40 @@ export function load() {
 
 export function save(state) {
   localStorage.setItem(KEY, JSON.stringify(state));
+}
+
+// ---- profile & backup -----------------------------------------------------
+// No accounts, no login — this is just "who is the primary golfer" so their
+// name/handicap don't need retyping every round, same idea as the bag.
+
+/** Renaming carries the handicap forward under the new name (best effort —
+ * old rounds keep whatever name was typed at the time, unchanged). */
+export function setProfile(state, { name }) {
+  const oldName = state.profile?.name;
+  const golfers = { ...state.golfers };
+  if (oldName && name && oldName !== name && golfers[oldName] && !golfers[name]) {
+    golfers[name] = golfers[oldName];
+  }
+  return { ...state, profile: { ...state.profile, name }, golfers };
+}
+
+export function exportData(state) {
+  return JSON.stringify(state, null, 2);
+}
+
+/** Parses and lightly validates a backup file's contents. Throws on
+ * anything that doesn't look like this app's data, so callers can show an
+ * error instead of silently loading garbage. */
+export function importData(json) {
+  const parsed = JSON.parse(json);
+  if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.rounds) || !Array.isArray(parsed.bag)) {
+    throw new Error("That file doesn't look like a My Yardage backup.");
+  }
+  return { ...blank(), ...parsed };
+}
+
+export function replaceState(_state, newState) {
+  return newState;
 }
 
 // ---- bag ----------------------------------------------------------------
