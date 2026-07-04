@@ -13,16 +13,16 @@ const AVG_WINDOWS = [
 
 export default function Home({ state, hero, onStartRound }) {
   const [players, setPlayers] = useState("You");
-  const [courseName, setCourseName] = useState("");
   const [selectedCourse, setSelectedCourse] = useState(null); // { id, name, holes, tees }
   const [selectedTee, setSelectedTee] = useState(null); // { key, name, color, gender, rating, slope }
   const [handicaps, setHandicaps] = useState({}); // { playerName: indexString }
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
-  const [busy, setBusy] = useState(false);
-  const [searchMsg, setSearchMsg] = useState("");
   const [avgWindow, setAvgWindow] = useState(null); // null = all rounds
+
+  const [pickingCourse, setPickingCourse] = useState(false);
+  const [nearby, setNearby] = useState([]);
+  const [nearbyBusy, setNearbyBusy] = useState(false);
+  const [nearbyMsg, setNearbyMsg] = useState("");
+  const [loadingCourse, setLoadingCourse] = useState(false);
 
   const recent = state.rounds.slice(0, 4);
 
@@ -52,41 +52,34 @@ export default function Home({ state, hero, onStartRound }) {
   const playerNames = players.split(",").map((p) => p.trim()).filter(Boolean).slice(0, MAX_PLAYERS);
   const playerCount = players.split(",").map((p) => p.trim()).filter(Boolean).length;
 
-  async function runSearch(q) {
-    setBusy(true);
-    setSearchMsg("");
-    const courses = await searchCourses({ q });
-    setBusy(false);
-    setResults(courses);
-    if (!courses.length) setSearchMsg("No matches — you can still type the course name manually.");
-  }
-
-  async function findNearby() {
-    setBusy(true);
-    setSearchMsg("");
+  async function openCoursePicker() {
+    setSelectedCourse(null);
+    setSelectedTee(null);
+    setNearby([]);
+    setNearbyMsg("");
+    setPickingCourse(true);
+    setNearbyBusy(true);
     try {
       const pos = await currentPosition();
       const courses = await searchCourses({ lat: pos.lat, lng: pos.lon, radiusMi: 25 });
-      setResults(courses);
-      if (!courses.length) setSearchMsg("Nothing found nearby — try searching by name.");
+      setNearby(courses);
+      if (!courses.length) setNearbyMsg("No courses found nearby — you can still start without one.");
     } catch {
-      setSearchMsg("Couldn't read GPS — check location permission, or search by name.");
+      setNearbyMsg("Couldn't read GPS — check location permission, or start without a course.");
     }
-    setBusy(false);
+    setNearbyBusy(false);
   }
 
   async function pickCourse(c) {
-    setCourseName(c.name);
-    setSearchOpen(false);
-    setResults([]);
-    setSelectedTee(null);
+    setLoadingCourse(true);
     const [holes, tees] = await Promise.all([fetchCourseHoles(c.id), fetchCourseTees(c.id)]);
     setSelectedCourse({ id: c.id, name: c.name, holes: holes.length ? holes : null, tees });
     const withRatings = tees.filter((t) => t.rating != null && t.slope != null);
-    if (withRatings.length) setSelectedTee(withRatings[0]);
+    setSelectedTee(withRatings.length ? withRatings[0] : null);
+    setLoadingCourse(false);
   }
 
-  function start() {
+  function start(course) {
     const handicapIndexes = Object.fromEntries(
       playerNames
         .map((p) => [p, parseFloat(handicaps[p] ?? state.golfers?.[p]?.handicapIndex ?? "")])
@@ -94,12 +87,13 @@ export default function Home({ state, hero, onStartRound }) {
     );
     onStartRound({
       players: playerNames,
-      course: courseName.trim() || "New round",
-      courseId: selectedCourse?.id ?? null,
-      courseHoles: selectedCourse?.holes ?? null,
+      course: course?.name || "New round",
+      courseId: course?.id ?? null,
+      courseHoles: course?.holes ?? null,
       handicapIndexes,
       teeRatingSlope: selectedTee ? { rating: selectedTee.rating, slope: selectedTee.slope } : null,
     });
+    setPickingCourse(false);
   }
 
   return (
@@ -120,117 +114,11 @@ export default function Home({ state, hero, onStartRound }) {
         <h1>Ready when you are</h1>
       </header>
 
-      <button className="btn raise" onClick={start}>
+      <button className="btn raise" onClick={openCoursePicker}>
         ▶ Start a round
       </button>
 
       <div className="card" style={{ marginTop: 14 }}>
-        <label className="muted small" htmlFor="course">
-          Course
-        </label>
-        <div className="row" style={{ gap: 6, marginTop: 6 }}>
-          <input
-            id="course"
-            type="text"
-            value={courseName}
-            onChange={(e) => {
-              setCourseName(e.target.value);
-              setSelectedCourse(null);
-            }}
-            placeholder="Type a name, or find one below"
-          />
-          <button
-            className="chip"
-            style={{ flexShrink: 0 }}
-            onClick={() => setSearchOpen((o) => !o)}
-          >
-            🔍 Find
-          </button>
-        </div>
-        {selectedCourse?.holes && (
-          <p className="small" style={{ color: "var(--pine-200)", margin: "6px 0 0" }}>
-            ✓ Par/yardage loaded for {selectedCourse.holes.length} holes
-          </p>
-        )}
-
-        {selectedCourse?.tees?.some((t) => t.rating != null && t.slope != null) && (
-          <div style={{ marginTop: 8 }}>
-            <p className="muted small" style={{ marginBottom: 4 }}>
-              Tee (for handicap calculation)
-            </p>
-            <div className="chips">
-              {selectedCourse.tees
-                .filter((t) => t.rating != null && t.slope != null)
-                .map((t) => (
-                  <button
-                    key={t.key}
-                    className={`chip ${selectedTee?.key === t.key ? "on" : ""}`}
-                    onClick={() => setSelectedTee(t)}
-                  >
-                    {t.name} {t.gender ? `(${t.gender[0]})` : ""} · {t.rating}/{t.slope}
-                  </button>
-                ))}
-            </div>
-          </div>
-        )}
-
-        {searchOpen && (
-          <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--line)" }}>
-            <div className="row" style={{ gap: 6 }}>
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search course name"
-              />
-              <button
-                className="chip"
-                style={{ flexShrink: 0 }}
-                onClick={() => query.trim().length > 1 && runSearch(query.trim())}
-              >
-                Go
-              </button>
-            </div>
-            <button className="btn ghost" style={{ marginTop: 8, height: 40 }} onClick={findNearby}>
-              📍 Find courses near me
-            </button>
-            {busy && <p className="muted small" style={{ marginTop: 6 }}>Searching…</p>}
-            {searchMsg && <p className="muted small" style={{ marginTop: 6 }}>{searchMsg}</p>}
-            {results.map((c) => (
-              <button
-                key={c.id}
-                className="list-row row"
-                style={{
-                  width: "100%",
-                  background: "none",
-                  border: "none",
-                  textAlign: "left",
-                  cursor: "pointer",
-                  color: "var(--ink)",
-                }}
-                onClick={() => pickCourse(c)}
-              >
-                <div>
-                  <div style={{ fontSize: 14 }}>{c.name}</div>
-                  <div className="muted small">
-                    {[c.city, c.state].filter(Boolean).join(", ") || " "}
-                  </div>
-                </div>
-                {c.distance_mi != null && (
-                  <span className="small num" style={{ color: "var(--pine-200)" }}>
-                    {c.distance_mi.toFixed(1)} mi
-                  </span>
-                )}
-              </button>
-            ))}
-            {results.length > 0 && (
-              <p className="small" style={{ opacity: 0.6, marginTop: 6 }}>{ATTRIBUTION}</p>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="card">
         <label className="muted small" htmlFor="players">
           Playing with (comma-separated — first name is you, up to {MAX_PLAYERS})
         </label>
@@ -376,6 +264,91 @@ export default function Home({ state, hero, onStartRound }) {
           );
         })}
       </div>
+
+      {pickingCourse && (
+        <div className="course-overlay">
+          <div className="course-sheet">
+            <div className="row">
+              <strong style={{ fontSize: 16 }}>
+                {selectedCourse ? "Pick your tee" : "Pick your course"}
+              </strong>
+              <button className="chip" onClick={() => setPickingCourse(false)}>✕</button>
+            </div>
+
+            {!selectedCourse && (
+              <>
+                {nearbyBusy && (
+                  <p className="muted small" style={{ marginTop: 12 }}>📍 Finding golf courses near you…</p>
+                )}
+                {nearbyMsg && <p className="muted small" style={{ marginTop: 12 }}>{nearbyMsg}</p>}
+                {loadingCourse && <p className="muted small" style={{ marginTop: 12 }}>Loading course details…</p>}
+                <div style={{ marginTop: 8 }}>
+                  {nearby.map((c) => (
+                    <button
+                      key={c.id}
+                      className="list-row row"
+                      style={{ width: "100%", background: "none", border: "none", textAlign: "left", cursor: "pointer", color: "var(--ink)" }}
+                      onClick={() => pickCourse(c)}
+                    >
+                      <div>
+                        <div style={{ fontSize: 14 }}>{c.name}</div>
+                        <div className="muted small">
+                          {[c.city, c.state].filter(Boolean).join(", ") || " "}
+                        </div>
+                      </div>
+                      {c.distance_mi != null && (
+                        <span className="small num" style={{ color: "var(--pine-200)" }}>
+                          {c.distance_mi.toFixed(1)} mi
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                {nearby.length > 0 && (
+                  <p className="small" style={{ opacity: 0.6, marginTop: 8 }}>{ATTRIBUTION}</p>
+                )}
+                <button className="btn ghost" style={{ marginTop: 14 }} onClick={() => start(null)}>
+                  Skip — start without a course
+                </button>
+              </>
+            )}
+
+            {selectedCourse && (
+              <>
+                <p className="small" style={{ color: "var(--pine-200)", marginTop: 10 }}>
+                  {selectedCourse.name}
+                  {selectedCourse.holes ? ` · par/yardage loaded for ${selectedCourse.holes.length} holes` : " · no hole data available"}
+                </p>
+                {selectedCourse.tees?.some((t) => t.rating != null && t.slope != null) ? (
+                  <div className="chips" style={{ marginTop: 10 }}>
+                    {selectedCourse.tees
+                      .filter((t) => t.rating != null && t.slope != null)
+                      .map((t) => (
+                        <button
+                          key={t.key}
+                          className={`chip ${selectedTee?.key === t.key ? "on" : ""}`}
+                          onClick={() => setSelectedTee(t)}
+                        >
+                          {t.name} {t.gender ? `(${t.gender[0]})` : ""} · {t.rating}/{t.slope}
+                        </button>
+                      ))}
+                  </div>
+                ) : (
+                  <p className="muted small" style={{ marginTop: 8 }}>
+                    No tee ratings available for this course — net scoring won't be available this round.
+                  </p>
+                )}
+                <button className="btn pine" style={{ marginTop: 16 }} onClick={() => start(selectedCourse)}>
+                  ▶ Start round at {selectedCourse.name}
+                </button>
+                <button className="btn ghost" style={{ marginTop: 8 }} onClick={() => setSelectedCourse(null)}>
+                  ← Back to course list
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
 }
