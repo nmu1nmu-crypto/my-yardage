@@ -492,37 +492,50 @@ export default function Home({ state, hero, update, onStartRound }) {
       </div>
 
       {pickingCourse && (
-        <div className="course-overlay">
-          <div className="course-sheet">
-            <div className="row">
-              <strong style={{ fontSize: 16 }}>
-                {selectedCourse ? "Pick your tee" : "Pick your course"}
-              </strong>
-              <div className="row" style={{ gap: 6, width: "auto" }}>
-                {!selectedCourse && (
-                  <button
-                    className="chip"
-                    aria-label="Search courses"
-                    onClick={() => setSearchOpen((v) => !v)}
-                  >
-                    🔍
-                  </button>
-                )}
-                <button className="chip" onClick={() => setPickingCourse(false)}>✕</button>
-              </div>
-            </div>
+        <div className="picker-screen">
+          <div className="picker-header">
+            <button
+              className="picker-back"
+              aria-label={selectedCourse ? "Back to course list" : "Close"}
+              onClick={() => (selectedCourse ? setSelectedCourse(null) : setPickingCourse(false))}
+            >
+              ←
+            </button>
+            <span className="picker-title">
+              {selectedCourse ? "Pick your tee" : "Pick your course"}
+            </span>
+            {!selectedCourse && (
+              <button
+                className="chip"
+                aria-label="Search courses"
+                onClick={() => setSearchOpen((v) => !v)}
+              >
+                🔍
+              </button>
+            )}
+          </div>
 
-            {!selectedCourse && searchOpen && (
+          {!selectedCourse && searchOpen && (
+            <div style={{ padding: "12px 16px 0" }}>
               <input
                 type="text"
                 autoFocus
                 placeholder="Search courses by name…"
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
-                style={{ marginTop: 10 }}
               />
-            )}
+            </div>
+          )}
 
+          {!selectedCourse && !(searchOpen && searchQuery.trim()) && (
+            <div className="picker-tabs">
+              <button className={`chip ${pickerTab === "nearby" ? "on" : ""}`} onClick={() => setPickerTab("nearby")}>Nearby</button>
+              <button className={`chip ${pickerTab === "recent" ? "on" : ""}`} onClick={() => setPickerTab("recent")}>Recent</button>
+              <button className={`chip ${pickerTab === "favourites" ? "on" : ""}`} onClick={() => setPickerTab("favourites")}>Favourites</button>
+            </div>
+          )}
+
+          <div className="picker-body">
             {!selectedCourse && (
               <>
                 {searchOpen && searchQuery.trim() ? (
@@ -535,12 +548,6 @@ export default function Home({ state, hero, update, onStartRound }) {
                   </>
                 ) : (
                   <>
-                    <div className="chips" style={{ marginTop: 12 }}>
-                      <button className={`chip ${pickerTab === "nearby" ? "on" : ""}`} onClick={() => setPickerTab("nearby")}>Nearby</button>
-                      <button className={`chip ${pickerTab === "recent" ? "on" : ""}`} onClick={() => setPickerTab("recent")}>Recent</button>
-                      <button className={`chip ${pickerTab === "favourites" ? "on" : ""}`} onClick={() => setPickerTab("favourites")}>Favourites</button>
-                    </div>
-
                     {loadingCourse && <p className="muted small" style={{ marginTop: 12 }}>Loading course details…</p>}
 
                     {pickerTab === "nearby" && (
@@ -610,9 +617,6 @@ export default function Home({ state, hero, update, onStartRound }) {
                 )}
                 <button className="btn pine" style={{ marginTop: 16 }} onClick={() => start(selectedCourse)}>
                   ▶ Start round at {selectedCourse.name}
-                </button>
-                <button className="btn ghost" style={{ marginTop: 8 }} onClick={() => setSelectedCourse(null)}>
-                  ← Back to course list
                 </button>
               </>
             )}
