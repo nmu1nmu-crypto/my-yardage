@@ -55,7 +55,10 @@ body {
  * element from the viewport during the address-bar collapse animation
  * while the page itself scrolls. Only .screen scrolls; #root never does,
  * so the tabbar never has a chance to drift. */
-.screen { flex: 1; min-height: 0; padding: 16px; overflow-y: auto; overflow-x: hidden; }
+/* Top padding always clears the iPhone status bar (time/wifi/battery) on
+ * every screen, not just Home — env(safe-area-inset-top) only resolves to
+ * a real value with viewport-fit=cover (set in index.html). */
+.screen { flex: 1; min-height: 0; padding: calc(16px + env(safe-area-inset-top)) 16px 16px; overflow-y: auto; overflow-x: hidden; }
 
 /* Numbers are the product — they get their own face */
 .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
@@ -65,7 +68,11 @@ body {
   background-size: cover;
   background-position: center;
   color: var(--pine-50);
-  margin: -16px -16px 0;
+  /* Cancels .screen's full top padding (including the safe-area part above)
+   * so the photo runs full-bleed under the status bar, then re-adds exactly
+   * one safe-area-inset-top via its own padding below — without this the
+   * safe area would effectively be applied twice. */
+  margin: calc(-16px - env(safe-area-inset-top)) -16px 0;
   padding: calc(20px + env(safe-area-inset-top)) 16px 56px;
 }
 .hero .eyebrow { color: var(--pine-100); font-size: 13px; margin: 0; }
