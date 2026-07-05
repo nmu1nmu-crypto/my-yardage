@@ -49,14 +49,22 @@ function blank() {
     rounds: [],
     activeRound: null,
     golfers: {},
-    profile: { name: "You", units: { distance: "yards", wind: "mph" } },
+    profile: { name: "You", units: { distance: "yards", wind: "mph" }, currentCourse: null, avatar: null },
+    recentCourses: [],
+    favoriteCourses: [],
   };
 }
 
+/** Merges saved state onto blank()'s defaults so fields added in later
+ * versions (e.g. recentCourses, favoriteCourses) always exist, even for a
+ * device whose localStorage predates that field — never a hole app crash on
+ * upgrade. */
 export function load() {
   try {
     const raw = localStorage.getItem(KEY);
-    return raw ? JSON.parse(raw) : blank();
+    if (!raw) return blank();
+    const parsed = JSON.parse(raw);
+    return { ...blank(), ...parsed, profile: { ...blank().profile, ...parsed.profile } };
   } catch {
     return blank();
   }
@@ -94,6 +102,34 @@ export function removeGolfer(state, name) {
   return { ...state, golfers };
 }
 
+export function setAvatar(state, dataUri) {
+  return { ...state, profile: { ...state.profile, avatar: dataUri } };
+}
+
+const MAX_RECENT_COURSES = 8;
+
+/** Sets the course shown on Home ("last course shown, default when the
+ * golfer selects a different one") and records it in recent history.
+ * course: { id, name, city, state } — pass null to clear (no course linked). */
+export function setCurrentCourse(state, course) {
+  if (!course) return { ...state, profile: { ...state.profile, currentCourse: null } };
+  const recentCourses = [
+    course,
+    ...state.recentCourses.filter((c) => c.id !== course.id),
+  ].slice(0, MAX_RECENT_COURSES);
+  return { ...state, profile: { ...state.profile, currentCourse: course }, recentCourses };
+}
+
+/** course: { id, name, city, state } — toggled by id, full object kept so the
+ * Favourites tab can render without a second lookup. */
+export function toggleFavoriteCourse(state, course) {
+  const has = state.favoriteCourses.some((c) => c.id === course.id);
+  const favoriteCourses = has
+    ? state.favoriteCourses.filter((c) => c.id !== course.id)
+    : [...state.favoriteCourses, course];
+  return { ...state, favoriteCourses };
+}
+
 export function exportData(state) {
   return JSON.stringify(state, null, 2);
 }
@@ -106,7 +142,7 @@ export function importData(json) {
   if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.rounds) || !Array.isArray(parsed.bag)) {
     throw new Error("That file doesn't look like a My Yardage backup.");
   }
-  return { ...blank(), ...parsed };
+  return { ...blank(), ...parsed, profile: { ...blank().profile, ...parsed.profile } };
 }
 
 export function replaceState(_state, newState) {

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { clubAverage, roundStats, skins, calculatedHandicapIndex, setProfile, removeGolfer, exportData, importData, replaceState } from "../lib/store.js";
+import { clubAverage, roundStats, skins, calculatedHandicapIndex, setProfile, removeGolfer, exportData, importData, replaceState, setAvatar, setCurrentCourse, toggleFavoriteCourse } from "../lib/store.js";
 import { currentPosition } from "../lib/geo.js";
 import { searchCourses, fetchCourseHoles, fetchCourseTees, ATTRIBUTION } from "../lib/courseApi.js";
 import { buildMailto, formatAllRoundsText } from "../lib/scorecardEmail.js";
@@ -28,6 +28,12 @@ export default function Home({ state, hero, update, onStartRound }) {
   const [nearbyBusy, setNearbyBusy] = useState(false);
   const [nearbyMsg, setNearbyMsg] = useState("");
   const [loadingCourse, setLoadingCourse] = useState(false);
+  const [pickerTab, setPickerTab] = useState("nearby"); // "nearby" | "recent" | "favourites"
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const searchTimer = useRef(null);
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [nameDraft, setNameDraft] = useState(profileName);
@@ -36,6 +42,7 @@ export default function Home({ state, hero, update, onStartRound }) {
   const [windUnitDraft, setWindUnitDraft] = useState(state.profile?.units?.wind || "mph");
   const [importMsg, setImportMsg] = useState("");
   const fileInputRef = useRef(null);
+  const avatarInputRef = useRef(null);
 
   const recent = state.rounds.slice(0, 4);
 
@@ -58,6 +65,8 @@ export default function Home({ state, hero, update, onStartRound }) {
   })();
 
   const handicapCalc = calculatedHandicapIndex(state.rounds, profileName);
+  const badgeHandicap = handicapCalc?.index ?? state.golfers?.[profileName]?.handicapIndex ?? null;
+  const currentCourse = state.profile?.currentCourse || null;
 
   const bagPreview = state.bag.slice(0, 8);
   const maxYards = Math.max(...bagPreview.map((c) => clubAverage(c).yards), 1);
@@ -142,6 +151,10 @@ export default function Home({ state, hero, update, onStartRound }) {
     setSelectedTee(null);
     setNearby([]);
     setNearbyMsg("");
+    setPickerTab("nearby");
+    setSearchOpen(false);
+    setSearchQuery("");
+    setSearchResults([]);
     setPickingCourse(true);
     setNearbyBusy(true);
     try {
@@ -155,6 +168,22 @@ export default function Home({ state, hero, update, onStartRound }) {
     setNearbyBusy(false);
   }
 
+  function onSearchChange(value) {
+    setSearchQuery(value);
+    clearTimeout(searchTimer.current);
+    if (!value.trim()) {
+      setSearchResults([]);
+      setSearchBusy(false);
+      return;
+    }
+    setSearchBusy(true);
+    searchTimer.current = setTimeout(async () => {
+      const courses = await searchCourses({ q: value.trim() });
+      setSearchResults(courses);
+      setSearchBusy(false);
+    }, 400);
+  }
+
   async function pickCourse(c) {
     setLoadingCourse(true);
     const [holes, tees] = await Promise.all([fetchCourseHoles(c.id), fetchCourseTees(c.id)]);
@@ -162,6 +191,47 @@ export default function Home({ state, hero, update, onStartRound }) {
     const withRatings = tees.filter((t) => t.rating != null && t.slope != null);
     setSelectedTee(withRatings.length ? withRatings[0] : null);
     setLoadingCourse(false);
+    update(setCurrentCourse, { id: c.id, name: c.name, city: c.city, state: c.state });
+  }
+
+  function courseRow(c) {
+    const isFav = state.favoriteCourses.some((f) => f.id === c.id);
+    return (
+      <div key={c.id} className="list-row row course-row">
+        <button
+          className="course-row-main"
+          onClick={() => pickCourse(c)}
+        >
+          <div style={{ fontSize: 14 }}>{c.name}</div>
+          <div className="muted small">
+            {[c.city, c.state].filter(Boolean).join(", ") || " "}
+          </div>
+        </button>
+        <div className="row" style={{ gap: 8, width: "auto", flexShrink: 0 }}>
+          {c.distance_mi != null && (
+            <span className="small num" style={{ color: "var(--pine-200)" }}>
+              {c.distance_mi.toFixed(1)} mi
+            </span>
+          )}
+          <button
+            className="star-btn"
+            aria-label={isFav ? "Remove from favourites" : "Add to favourites"}
+            onClick={() => update(toggleFavoriteCourse, { id: c.id, name: c.name, city: c.city, state: c.state })}
+          >
+            {isFav ? "★" : "☆"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  function onAvatarFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => update(setAvatar, reader.result);
+    reader.readAsDataURL(file);
   }
 
   function start(course) {
@@ -184,21 +254,43 @@ export default function Home({ state, hero, update, onStartRound }) {
   return (
     <>
       <header
-        className="hero"
+        className="hero hero--photo"
         style={
           hero && {
-            backgroundImage: `linear-gradient(rgba(4,52,44,0.55), rgba(4,52,44,0.88)), url(${hero.src})`,
+            backgroundImage: `linear-gradient(rgba(4,52,44,0.15), rgba(4,52,44,0.82) 75%), url(${hero.src})`,
           }
         }
       >
-        <div className="row">
-          <div className="brandmark" style={{ marginBottom: 0 }}>
-            <span className="dot" aria-hidden="true">⛳</span>
-            My Yardage
+        <div className="row" style={{ alignItems: "flex-start" }}>
+          <button
+            className="avatar-btn"
+            onClick={() => avatarInputRef.current?.click()}
+            aria-label="Change profile photo"
+          >
+            {state.profile?.avatar ? (
+              <img src={state.profile.avatar} alt="" />
+            ) : (
+              <span aria-hidden="true">⛳</span>
+            )}
+          </button>
+          <input
+            ref={avatarInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: "none" }}
+            onChange={onAvatarFile}
+          />
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p className="hero-greeting">Hi, {profileName}</p>
+            {badgeHandicap != null && (
+              <span className="pill gold" style={{ marginTop: 4 }}>HCP {badgeHandicap}</span>
+            )}
           </div>
+
           <button
             className="chip"
-            style={{ background: "rgba(255,255,255,0.14)", border: "none", color: "var(--pine-50)" }}
+            style={{ background: "rgba(255,255,255,0.14)", border: "none", color: "var(--pine-50)", flexShrink: 0 }}
             onClick={() => {
               setNameDraft(profileName);
               setEmailDraft(state.profile?.email || "");
@@ -207,11 +299,29 @@ export default function Home({ state, hero, update, onStartRound }) {
               setImportMsg("");
               setProfileOpen(true);
             }}
+            aria-label="Profile settings"
           >
-            👤 {profileName}
+            ⚙
           </button>
         </div>
-        <p className="eyebrow">Welcome back</p>
+
+        <div className="hero-course">
+          {currentCourse ? (
+            <>
+              <p className="hero-course-name">📍 {currentCourse.name}</p>
+              {(currentCourse.city || currentCourse.state) && (
+                <p className="hero-course-loc">
+                  {[currentCourse.city, currentCourse.state].filter(Boolean).join(", ")}
+                </p>
+              )}
+            </>
+          ) : (
+            <p className="hero-course-name">📍 No course selected yet</p>
+          )}
+          <button className="hero-change-btn" onClick={openCoursePicker}>
+            {currentCourse ? "Select different facility" : "Choose a course"}
+          </button>
+        </div>
       </header>
 
       <button className="btn raise" onClick={openCoursePicker}>
@@ -402,40 +512,84 @@ export default function Home({ state, hero, update, onStartRound }) {
               <strong style={{ fontSize: 16 }}>
                 {selectedCourse ? "Pick your tee" : "Pick your course"}
               </strong>
-              <button className="chip" onClick={() => setPickingCourse(false)}>✕</button>
+              <div className="row" style={{ gap: 6, width: "auto" }}>
+                {!selectedCourse && (
+                  <button
+                    className="chip"
+                    aria-label="Search courses"
+                    onClick={() => setSearchOpen((v) => !v)}
+                  >
+                    🔍
+                  </button>
+                )}
+                <button className="chip" onClick={() => setPickingCourse(false)}>✕</button>
+              </div>
             </div>
+
+            {!selectedCourse && searchOpen && (
+              <input
+                type="text"
+                autoFocus
+                placeholder="Search courses by name…"
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                style={{ marginTop: 10 }}
+              />
+            )}
 
             {!selectedCourse && (
               <>
-                {nearbyBusy && (
-                  <p className="muted small" style={{ marginTop: 12 }}>📍 Finding golf courses near you…</p>
-                )}
-                {nearbyMsg && <p className="muted small" style={{ marginTop: 12 }}>{nearbyMsg}</p>}
-                {loadingCourse && <p className="muted small" style={{ marginTop: 12 }}>Loading course details…</p>}
-                <div style={{ marginTop: 8 }}>
-                  {nearby.map((c) => (
-                    <button
-                      key={c.id}
-                      className="list-row row"
-                      style={{ width: "100%", background: "none", border: "none", textAlign: "left", cursor: "pointer", color: "var(--ink)" }}
-                      onClick={() => pickCourse(c)}
-                    >
-                      <div>
-                        <div style={{ fontSize: 14 }}>{c.name}</div>
-                        <div className="muted small">
-                          {[c.city, c.state].filter(Boolean).join(", ") || " "}
-                        </div>
+                {searchOpen && searchQuery.trim() ? (
+                  <>
+                    {searchBusy && <p className="muted small" style={{ marginTop: 12 }}>Searching…</p>}
+                    {!searchBusy && !searchResults.length && (
+                      <p className="muted small" style={{ marginTop: 12 }}>No courses matched "{searchQuery.trim()}".</p>
+                    )}
+                    <div style={{ marginTop: 8 }}>{searchResults.map(courseRow)}</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="chips" style={{ marginTop: 12 }}>
+                      <button className={`chip ${pickerTab === "nearby" ? "on" : ""}`} onClick={() => setPickerTab("nearby")}>Nearby</button>
+                      <button className={`chip ${pickerTab === "recent" ? "on" : ""}`} onClick={() => setPickerTab("recent")}>Recent</button>
+                      <button className={`chip ${pickerTab === "favourites" ? "on" : ""}`} onClick={() => setPickerTab("favourites")}>Favourites</button>
+                    </div>
+
+                    {loadingCourse && <p className="muted small" style={{ marginTop: 12 }}>Loading course details…</p>}
+
+                    {pickerTab === "nearby" && (
+                      <>
+                        {nearbyBusy && (
+                          <p className="muted small" style={{ marginTop: 12 }}>📍 Finding golf courses near you…</p>
+                        )}
+                        {nearbyMsg && <p className="muted small" style={{ marginTop: 12 }}>{nearbyMsg}</p>}
+                        <div style={{ marginTop: 8 }}>{nearby.map(courseRow)}</div>
+                        {nearby.length > 0 && (
+                          <p className="small" style={{ opacity: 0.6, marginTop: 8 }}>{ATTRIBUTION}</p>
+                        )}
+                      </>
+                    )}
+
+                    {pickerTab === "recent" && (
+                      <div style={{ marginTop: 8 }}>
+                        {state.recentCourses.length === 0 ? (
+                          <p className="muted small">No recently played courses yet.</p>
+                        ) : (
+                          state.recentCourses.map(courseRow)
+                        )}
                       </div>
-                      {c.distance_mi != null && (
-                        <span className="small num" style={{ color: "var(--pine-200)" }}>
-                          {c.distance_mi.toFixed(1)} mi
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-                {nearby.length > 0 && (
-                  <p className="small" style={{ opacity: 0.6, marginTop: 8 }}>{ATTRIBUTION}</p>
+                    )}
+
+                    {pickerTab === "favourites" && (
+                      <div style={{ marginTop: 8 }}>
+                        {state.favoriteCourses.length === 0 ? (
+                          <p className="muted small">Tap the star on a course to save it here.</p>
+                        ) : (
+                          state.favoriteCourses.map(courseRow)
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
                 <button className="btn ghost" style={{ marginTop: 14 }} onClick={() => start(null)}>
                   Skip — start without a course
