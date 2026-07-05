@@ -165,7 +165,14 @@ export default function Home({ state, hero, update, onStartRound }) {
     setNearbyBusy(true);
     try {
       const pos = await currentPosition();
-      const courses = await searchCourses({ lat: pos.lat, lng: pos.lon, radiusMi: 25 });
+      // Widen the radius until we've got a real list to choose from — a tight
+      // 25mi radius can come back thin in less golf-dense areas, and "nearby"
+      // shouldn't mean "the three closest" if there are more within reach.
+      let courses = [];
+      for (const radiusMi of [25, 50, 100]) {
+        courses = await searchCourses({ lat: pos.lat, lng: pos.lon, radiusMi, limit: 50 });
+        if (courses.length >= 20) break;
+      }
       setNearby(courses);
       if (!courses.length) setNearbyMsg("No courses found nearby — you can still start without one.");
     } catch {
