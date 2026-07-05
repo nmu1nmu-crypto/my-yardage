@@ -45,44 +45,31 @@ jobs:
           PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          # Decode certificates from base64
           echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode --output $CERTIFICATE_PATH
           echo "$PROVISION_PROFILE_BASE64" | base64 --decode --output $PP_PATH
 
-          # Create temporary keychain
           security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
           security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-          # Import certificate
           security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           security list-keychain -d user -s $KEYCHAIN_PATH
 
-          # Grant codesign access for non-interactive sessions (this is the key fix)
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-          # Install provisioning profile
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
 
-          # Extract UUID from provisioning profile
-          PP_UUID=$(security cms -D -i $PP_PATH | grep -A1 '<key>UUID</key>' | grep string | sed 's/.*<string>\(.*\)<\/string>.*/\1/')
-          echo "PROVISIONING_PROFILE_UUID=$PP_UUID" >> $GITHUB_ENV
-          echo "Provisioning profile UUID: $PP_UUID"
-
       - name: Auto-increment build number
         run: |
-          # Generate timestamp-based build number (e.g., 2607051545 = July 5, 2026 15:45)
-          # Apple requires this to increase with every upload
           BUILD_NUMBER=$(date +%y%m%d%H%M)
-          echo "🔢 Build number: $BUILD_NUMBER"
+          echo "Build number: $BUILD_NUMBER"
 
-          # Update Info.plist
           cd ios/App
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" App/Info.plist 2>/dev/null || \
             /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" App/Info.plist
 
-          echo "✅ Build number incremented for this deployment"
+          echo "Build number incremented for this deployment"
 
       - name: Archive iOS app
         env:
@@ -116,9 +103,7 @@ jobs:
           <plist version="1.0">
           <dict>
             <key>method</key>
-            <string>app-store-connect</string>
-            <key>destination</key>
-            <string>upload</string>
+            <string>app-store</string>
             <key>teamID</key>
             <string>DZDMWU3J75</string>
             <key>signingStyle</key>
@@ -128,6 +113,10 @@ jobs:
               <key>com.myyardage.app</key>
               <string>com.myyardage.app AppStore</string>
             </dict>
+            <key>uploadBitcode</key>
+            <false/>
+            <key>uploadSymbols</key>
+            <true/>
           </dict>
           </plist>
           EXPORT_EOF
@@ -151,13 +140,11 @@ jobs:
 
           xcrun altool --upload-app \
             --type ios \
-            --file $RUNNER_TEMP/ipa_export/*.ipa \
+            --file $RUNNER_TEMP/ipa_export/MyYardage.ipa \
             --apiKey $API_KEY_ID \
             --apiIssuer $API_ISSUER_ID
 
-          echo "✅ Successfully uploaded to App Store Connect!"
-          echo "🎯 TestFlight will process the build in 10-15 minutes"
-          echo "👉 https://appstoreconnect.apple.com/apps"
+          echo "Successfully uploaded to App Store Connect!"
 
       - name: Cleanup
         if: always()
