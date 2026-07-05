@@ -1,4 +1,4 @@
-name: iOS Build and Deploy
+name: iOS Build & Deploy
 
 on:
   push:
@@ -11,12 +11,13 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
 
       - name: Setup Xcode
@@ -27,7 +28,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build web app
+      - name: Build React app
         run: npm run build
 
       - name: Sync Capacitor iOS
@@ -44,7 +45,7 @@ jobs:
           PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
           KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
 
-          # Decode from base64
+          # Decode certificates from base64
           echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode --output $CERTIFICATE_PATH
           echo "$PROVISION_PROFILE_BASE64" | base64 --decode --output $PP_PATH
 
@@ -57,34 +58,48 @@ jobs:
           security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
           security list-keychain -d user -s $KEYCHAIN_PATH
 
-          # Grant codesign access for non-interactive SSH sessions
+          # Grant codesign access for non-interactive sessions (this is the key fix)
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
           # Install provisioning profile
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
           cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
 
+          # Extract UUID from provisioning profile
+          PP_UUID=$(security cms -D -i $PP_PATH | grep -A1 '<key>UUID</key>' | grep string | sed 's/.*<string>\(.*\)<\/string>.*/\1/')
+          echo "PROVISIONING_PROFILE_UUID=$PP_UUID" >> $GITHUB_ENV
+          echo "Provisioning profile UUID: $PP_UUID"
+
       - name: Auto-increment build number
         run: |
-          VERSION=$(date +%y%m%d%H%M)
+          # Generate timestamp-based build number (e.g., 2607051545 = July 5, 2026 15:45)
+          # Apple requires this to increase with every upload
+          BUILD_NUMBER=$(date +%y%m%d%H%M)
+          echo "🔢 Build number: $BUILD_NUMBER"
+
+          # Update Info.plist
           cd ios/App
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $VERSION" App/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CURRENT_PROJECT_VERSION $VERSION" App.xcodeproj/project.pbxproj || true
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" App/Info.plist 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string $BUILD_NUMBER" App/Info.plist
+
+          echo "✅ Build number incremented for this deployment"
 
       - name: Archive iOS app
         env:
           KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
         run: |
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $RUNNER_TEMP/app-signing.keychain-db
+
           cd ios/App
           xcodebuild archive \
             -project App.xcodeproj \
             -scheme App \
             -configuration Release \
             -archivePath $RUNNER_TEMP/MyYardage.xcarchive \
+            -allowProvisioningUpdates \
             CODE_SIGN_IDENTITY="Apple Distribution: naeem mushtaq (DZDMWU3J75)" \
             "CODE_SIGN_STYLE=Manual" \
-            "PROVISIONING_PROFILE=dee54e04-acd3-460e-af3c-0037e2afdff4" \
+            "PROVISIONING_PROFILE_SPECIFIER=com.myyardage.app AppStore" \
             PRODUCT_BUNDLE_IDENTIFIER=com.myyardage.app \
             DEVELOPMENT_TEAM=DZDMWU3J75 \
             archive
@@ -95,7 +110,7 @@ jobs:
         run: |
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" $RUNNER_TEMP/app-signing.keychain-db
 
-          cat > $RUNNER_TEMP/exportOptions.plist << 'EOF'
+          cat > $RUNNER_TEMP/ExportOptions.plist << 'EXPORT_EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -115,12 +130,14 @@ jobs:
             </dict>
           </dict>
           </plist>
-          EOF
+          EXPORT_EOF
 
           xcodebuild -exportArchive \
             -archivePath $RUNNER_TEMP/MyYardage.xcarchive \
             -exportPath $RUNNER_TEMP/ipa_export \
-            -exportOptionsPlist $RUNNER_TEMP/exportOptions.plist
+            -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist
+
+          ls -la $RUNNER_TEMP/ipa_export/
 
       - name: Upload to TestFlight
         env:
@@ -137,6 +154,10 @@ jobs:
             --file $RUNNER_TEMP/ipa_export/*.ipa \
             --apiKey $API_KEY_ID \
             --apiIssuer $API_ISSUER_ID
+
+          echo "✅ Successfully uploaded to App Store Connect!"
+          echo "🎯 TestFlight will process the build in 10-15 minutes"
+          echo "👉 https://appstoreconnect.apple.com/apps"
 
       - name: Cleanup
         if: always()
