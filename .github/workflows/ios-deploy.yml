@@ -103,7 +103,7 @@ jobs:
           <plist version="1.0">
           <dict>
             <key>method</key>
-            <string>app-store</string>
+            <string>app-store-connect</string>
             <key>teamID</key>
             <string>DZDMWU3J75</string>
             <key>signingStyle</key>
@@ -140,7 +140,7 @@ jobs:
 
           xcrun altool --upload-app \
             --type ios \
-            --file $RUNNER_TEMP/ipa_export/MyYardage.ipa \
+            --file $RUNNER_TEMP/ipa_export/App.ipa \
             --apiKey $API_KEY_ID \
             --apiIssuer $API_ISSUER_ID
 
