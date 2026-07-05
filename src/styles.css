@@ -29,8 +29,9 @@
 
 html, body {
   margin: 0;
-  overflow-x: hidden;
+  overflow: hidden;
   width: 100%;
+  height: 100%;
 }
 
 body {
@@ -41,20 +42,28 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Pinned to the true viewport via position:fixed rather than sized with
+ * 100dvh — dvh depends on the dynamic toolbar math that mobile Safari does,
+ * which doesn't reliably carry over to every WKWebView/iOS combination
+ * (reported: whole page scrolling and the tabbar drifting off-screen on a
+ * real device). A fixed, non-scrolling shell can't do that: body itself
+ * can't scroll (overflow:hidden + height:100%), and #root is pinned to the
+ * viewport regardless of how any engine computes dynamic viewport units.
+ * margin:0 auto + max-width centers it on wide (desktop preview) viewports
+ * via the standard auto-margin-on-fixed-element technique. */
 #root {
+  position: fixed;
+  inset: 0;
   max-width: 430px;
   margin: 0 auto;
-  height: 100dvh;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
 
-/* The tabbar is a normal flex item pinned by the app shell, not
- * position:fixed — iOS Safari/WKWebView can visually detach a fixed
- * element from the viewport during the address-bar collapse animation
- * while the page itself scrolls. Only .screen scrolls; #root never does,
- * so the tabbar never has a chance to drift. */
+/* The tabbar is a normal flex item pinned by the app shell, not its own
+ * position:fixed — it can only move if #root itself moves, and #root is
+ * pinned to the viewport above, so it never does. */
 /* Top padding always clears the iPhone status bar (time/wifi/battery) on
  * every screen, not just Home — env(safe-area-inset-top) only resolves to
  * a real value with viewport-fit=cover (set in index.html). */
