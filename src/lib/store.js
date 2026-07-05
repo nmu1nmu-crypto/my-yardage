@@ -94,6 +94,17 @@ export function setProfile(state, updates) {
   return { ...state, profile: { ...state.profile, ...updates, name, units }, golfers };
 }
 
+/** Sets a manual default Handicap Index for a player, from the profile
+ * sheet — used until (and overwritten once) finishRound has 3+ qualifying
+ * rounds to calculate a real one, at which point the calculated value takes
+ * over automatically. */
+export function setHandicapIndex(state, name, handicapIndex) {
+  return {
+    ...state,
+    golfers: { ...state.golfers, [name]: { ...(state.golfers[name] || {}), handicapIndex } },
+  };
+}
+
 /** Forgets a saved player's remembered handicap — for trimming the
  * "previously played with" list, not anything to do with round history. */
 export function removeGolfer(state, name) {

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { clubAverage, roundStats, skins, calculatedHandicapIndex, setProfile, removeGolfer, exportData, importData, replaceState, setAvatar, setCurrentCourse, toggleFavoriteCourse } from "../lib/store.js";
+import { clubAverage, roundStats, skins, calculatedHandicapIndex, setProfile, setHandicapIndex, removeGolfer, exportData, importData, replaceState, setAvatar, setCurrentCourse, toggleFavoriteCourse } from "../lib/store.js";
 import { currentPosition } from "../lib/geo.js";
 import { searchCourses, fetchCourseHoles, fetchCourseTees, ATTRIBUTION } from "../lib/courseApi.js";
 import { buildMailto, formatAllRoundsText } from "../lib/scorecardEmail.js";
@@ -20,7 +20,6 @@ export default function Home({ state, hero, update, onStartRound }) {
   const [playerBoxes, setPlayerBoxes] = useState([profileName]);
   const [selectedCourse, setSelectedCourse] = useState(null); // { id, name, holes, tees }
   const [selectedTee, setSelectedTee] = useState(null); // { key, name, color, gender, rating, slope }
-  const [handicaps, setHandicaps] = useState({}); // { playerName: indexString }
   const [avgWindow, setAvgWindow] = useState(null); // null = all rounds
   const [managingPlayers, setManagingPlayers] = useState(false);
 
@@ -41,6 +40,7 @@ export default function Home({ state, hero, update, onStartRound }) {
   const [emailDraft, setEmailDraft] = useState(state.profile?.email || "");
   const [distanceUnitDraft, setDistanceUnitDraft] = useState(state.profile?.units?.distance || "yards");
   const [windUnitDraft, setWindUnitDraft] = useState(state.profile?.units?.wind || "mph");
+  const [handicapDraft, setHandicapDraft] = useState(state.golfers?.[profileName]?.handicapIndex ?? "");
   const [importMsg, setImportMsg] = useState("");
   const fileInputRef = useRef(null);
   const avatarInputRef = useRef(null);
@@ -101,13 +101,18 @@ export default function Home({ state, hero, update, onStartRound }) {
 
   function saveProfile() {
     const trimmed = nameDraft.trim();
+    const finalName = trimmed || profileName;
     update(setProfile, {
-      name: trimmed || profileName,
+      name: finalName,
       email: emailDraft.trim(),
       units: { distance: distanceUnitDraft, wind: windUnitDraft },
     });
     if (trimmed && trimmed !== profileName) {
       setPlayerBoxes((boxes) => boxes.map((b, i) => (i === 0 && b === profileName ? trimmed : b)));
+    }
+    if (!handicapCalc) {
+      const parsed = parseFloat(handicapDraft);
+      update(setHandicapIndex, finalName, Number.isNaN(parsed) ? null : parsed);
     }
     setProfileOpen(false);
   }
@@ -238,7 +243,7 @@ export default function Home({ state, hero, update, onStartRound }) {
   function start(course) {
     const handicapIndexes = Object.fromEntries(
       playerNames
-        .map((p) => [p, parseFloat(handicaps[p] ?? state.golfers?.[p]?.handicapIndex ?? "")])
+        .map((p) => [p, parseFloat(state.golfers?.[p]?.handicapIndex ?? "")])
         .filter(([, v]) => !Number.isNaN(v))
     );
     onStartRound({
@@ -297,6 +302,7 @@ export default function Home({ state, hero, update, onStartRound }) {
               setEmailDraft(state.profile?.email || "");
               setDistanceUnitDraft(state.profile?.units?.distance || "yards");
               setWindUnitDraft(state.profile?.units?.wind || "mph");
+              setHandicapDraft(state.golfers?.[profileName]?.handicapIndex ?? "");
               setImportMsg("");
               setProfileOpen(true);
             }}
@@ -402,27 +408,6 @@ export default function Home({ state, hero, update, onStartRound }) {
           </div>
         )}
 
-        {playerNames.length > 0 && (
-          <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--line)" }}>
-            <p className="muted small" style={{ marginBottom: 6 }}>
-              Handicap index (optional — enables net scoring on the Scorecard)
-            </p>
-            {playerNames.map((p) => (
-              <div key={p} className="row" style={{ gap: 8, marginTop: 6 }}>
-                <span style={{ fontSize: 13, flex: 1 }}>{p}</span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="0.1"
-                  value={handicaps[p] ?? state.golfers?.[p]?.handicapIndex ?? ""}
-                  onChange={(e) => setHandicaps((h) => ({ ...h, [p]: e.target.value }))}
-                  placeholder="e.g. 14.2"
-                  style={{ width: 90, height: 36 }}
-                />
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {state.rounds.length > 1 && (
@@ -729,9 +714,21 @@ export default function Home({ state, hero, update, onStartRound }) {
                   </p>
                 </>
               ) : (
-                <p className="muted small" style={{ marginBottom: 0 }}>
-                  Link a course with tee ratings when starting a round and complete 18 holes — your handicap calculates itself from there.
-                </p>
+                <>
+                  <p className="muted small" style={{ marginTop: 4, marginBottom: 6 }}>
+                    Set a default until we can calculate one from your rounds — link a course
+                    with tee ratings and complete 18 holes to have it take over automatically.
+                  </p>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.1"
+                    value={handicapDraft}
+                    onChange={(e) => setHandicapDraft(e.target.value)}
+                    placeholder="e.g. 14.2"
+                    style={{ width: 90 }}
+                  />
+                </>
               )}
             </div>
 
