@@ -333,7 +333,7 @@ export default function Home({ state, hero, update, onStartRound }) {
             <p className="hero-course-name">📍 No course selected yet</p>
           )}
           <button className="hero-change-btn" onClick={openCoursePicker}>
-            {currentCourse ? "Select different facility" : "Choose a course"}
+            {currentCourse ? "Select different course" : "Choose a course"}
           </button>
         </div>
       </header>
