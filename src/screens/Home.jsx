@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { clubAverage, roundStats, skins, calculatedHandicapIndex, setProfile, setHandicapIndex, removeGolfer, exportData, importData, replaceState, setAvatar, setCurrentCourse, toggleFavoriteCourse } from "../lib/store.js";
+import { clubAverage, roundStats, calculatedHandicapIndex, setProfile, setHandicapIndex, removeGolfer, exportData, importData, replaceState, setAvatar, setCurrentCourse, toggleFavoriteCourse } from "../lib/store.js";
 import { currentPosition } from "../lib/geo.js";
 import { searchCourses, fetchCourseHoles, fetchCourseTees, ATTRIBUTION } from "../lib/courseApi.js";
 import { buildMailto, formatAllRoundsText } from "../lib/scorecardEmail.js";
@@ -46,12 +46,6 @@ export default function Home({ state, hero, update, onStartRound }) {
   const avatarInputRef = useRef(null);
 
   const recent = state.rounds.slice(0, 4);
-
-  const skinsWon = state.rounds.reduce((total, r) => {
-    if (r.players.length < 2) return total;
-    const { won } = skins(r);
-    return total + (won[r.players[0]] || 0);
-  }, 0);
 
   const avgScore = (() => {
     const windowed = avgWindow ? state.rounds.slice(0, avgWindow) : state.rounds;
@@ -443,8 +437,8 @@ export default function Home({ state, hero, update, onStartRound }) {
           <p className="value num">{avgScore}</p>
         </div>
         <div className="metric gold">
-          <p className="label">Skins won</p>
-          <p className="value num">£{skinsWon}</p>
+          <p className="label">Handicap</p>
+          <p className="value num">{badgeHandicap ?? "—"}</p>
         </div>
       </div>
 
