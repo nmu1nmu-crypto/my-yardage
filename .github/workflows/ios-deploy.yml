@@ -52,6 +52,17 @@ jobs:
       - name: Sync Capacitor iOS
         run: npx cap sync ios
 
+- name: Add required Info.plist keys after Capacitor sync
+        run: |
+          # Capacitor regenerates Info.plist on every sync, potentially removing custom keys.
+          # Re-add required privacy keys that Apple demands (ITMS-90683).
+          PLIST=ios/App/App/Info.plist
+          DESC="My Golf Distances uses your location on the course to measure shot distances and calculate plays-like yardages. Your location never leaves your device."
+          /usr/libexec/PlistBuddy -c "Add :NSLocationAlwaysAndWhenInUseUsageDescription string '$DESC'" $PLIST 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocationWhenInUseUsageDescription string '$DESC'" $PLIST 2>/dev/null || true
+          echo "Location keys ensured:"
+          grep -c NSLocation $PLIST
+
       - name: Ensure location usage descriptions exist
         run: |
           # Capacitor sync may regenerate Info.plist and remove custom keys
