@@ -52,6 +52,15 @@ jobs:
       - name: Sync Capacitor iOS
         run: npx cap sync ios
 
+      - name: Ensure location usage descriptions exist
+        run: |
+          # Capacitor sync may regenerate Info.plist and remove custom keys
+          # This step ensures the required location keys always exist
+          cd ios/App/App
+          /usr/libexec/PlistBuddy -c "Add :NSLocationAlwaysAndWhenInUseUsageDescription string 'My Golf Distances uses your location on the course to measure shot distances and calculate plays-like yardages. Your location never leaves your device.'" Info.plist 2>/dev/null || echo "Key already exists"
+          /usr/libexec/PlistBuddy -c "Add :NSLocationWhenInUseUsageDescription string 'My Golf Distances uses your location on the course to measure shot distances and calculate plays-like yardages. Your location never leaves your device.'" Info.plist 2>/dev/null || echo "Key already exists"
+
+
       - name: Install signing certificates
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
