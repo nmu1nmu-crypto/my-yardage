@@ -4,6 +4,7 @@ import { currentPosition } from "../lib/geo.js";
 import { searchCourses, fetchCourseHoles, fetchCourseTees, ATTRIBUTION } from "../lib/courseApi.js";
 import { buildMailto, formatAllRoundsText } from "../lib/scorecardEmail.js";
 import { distanceUnit, convertDistance, distanceLabel } from "../lib/units.js";
+import logo from "../assets/brand/logo-1024.png";
 
 const MAX_PLAYERS = 4;
 const AVG_WINDOWS = [
@@ -270,7 +271,7 @@ export default function Home({ state, hero, update, onStartRound }) {
             {state.profile?.avatar ? (
               <img src={state.profile.avatar} alt="" />
             ) : (
-              <span aria-hidden="true">⛳</span>
+              <img src={logo} alt="" />
             )}
           </button>
           <input

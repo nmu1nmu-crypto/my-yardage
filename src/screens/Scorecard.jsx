@@ -2,6 +2,7 @@ import { useState } from "react";
 import { setScoreForHole, strokesReceived } from "../lib/store.js";
 import { ATTRIBUTION } from "../lib/courseApi.js";
 import RoundPicker, { resolveRound } from "../components/RoundPicker.jsx";
+import logo from "../assets/brand/logo-1024.png";
 
 const FRONT = Array.from({ length: 9 }, (_, i) => i + 1);
 const BACK = Array.from({ length: 9 }, (_, i) => i + 10);
@@ -160,7 +161,10 @@ export default function Scorecard({ state, update }) {
               {new Date(round.startedAt).toLocaleDateString()}
             </p>
           </div>
-          <div className="sg-brandmark">⛳ My Yardage</div>
+          <div className="sg-brandmark">
+            <img src={logo} alt="" />
+            My Yardage
+          </div>
         </div>
       </div>
 

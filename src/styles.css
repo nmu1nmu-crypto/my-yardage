@@ -210,7 +210,11 @@ select { appearance: none; -webkit-appearance: none; }
   color: #1a1a1a; margin-top: 8px;
 }
 .sg-header-card .muted { color: #857c60; }
-.sg-brandmark { font-size: 11px; font-weight: 700; color: #1d9e75; white-space: nowrap; }
+.sg-brandmark {
+  font-size: 11px; font-weight: 700; color: #1d9e75; white-space: nowrap;
+  display: flex; align-items: center; gap: 5px;
+}
+.sg-brandmark img { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; }
 
 .sg-banner {
   background: #1a9e5c; color: #fff; text-align: center; font-weight: 700;
