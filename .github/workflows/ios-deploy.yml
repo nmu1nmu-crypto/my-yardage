@@ -14,7 +14,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 22 
+      - name: Validate App Store Connect API key secret
+        env:
+          API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY }}
+        run: |
+          if [ -z "$API_KEY_CONTENT" ]; then
+            echo "::error::APP_STORE_CONNECT_API_KEY secret is empty."
+            exit 1
+          fi
+          if ! echo "$API_KEY_CONTENT" | grep -q "BEGIN PRIVATE KEY"; then
+            echo "::error::APP_STORE_CONNECT_API_KEY doesn't look like a valid .p8 key (missing the '-----BEGIN PRIVATE KEY-----' header). Re-download it from App Store Connect > Users and Access > Integrations > App Store Connect API, and paste the full file contents into the secret."
+            exit 1
+          fi
+          if ! echo "$API_KEY_CONTENT" | grep -q "END PRIVATE KEY"; then
+            echo "::error::APP_STORE_CONNECT_API_KEY looks truncated (missing the '-----END PRIVATE KEY-----' footer)."
+            exit 1
+          fi
+          echo "App Store Connect API key format looks valid."
+
+      - name: Setup Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: "22"
