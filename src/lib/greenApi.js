@@ -14,7 +14,11 @@
 // play. Results are baked into the round object and persisted like
 // everything else, so Round.jsx makes zero network calls for this.
 
+import { polygonCentroid } from "./geo.js";
+
 const OVERPASS_URL = "https://overpass-api.de/api/interpreter";
+const ELEVATION_URL = "https://api.open-meteo.com/v1/elevation";
+const ELEVATION_BATCH_SIZE = 100; // Open-Meteo's per-request coordinate limit
 
 // Practice/chipping/putting greens aren't a hole's actual target and would
 // otherwise get auto-selected as if they were.
@@ -55,10 +59,39 @@ async function overpassFetch(query) {
   }
 }
 
+async function fetchElevationBatch(points) {
+  if (!points.length) return points.map(() => null);
+  const lat = points.map((p) => p.lat).join(",");
+  const lon = points.map((p) => p.lon).join(",");
+  try {
+    const res = await fetch(`${ELEVATION_URL}?latitude=${lat}&longitude=${lon}`);
+    if (!res.ok) return points.map(() => null);
+    const data = await res.json();
+    return data.elevation ?? points.map(() => null);
+  } catch {
+    return points.map(() => null);
+  }
+}
+
+/** Real terrain elevation (metres, Copernicus DEM ~90m resolution) for each
+ * point — same free, no-key provider (Open-Meteo) already used for
+ * weather. Chunked into batches of 100 (its per-request limit). Fails
+ * soft per point: null means "unknown," never a guessed value. */
+async function fetchElevations(points) {
+  const results = [];
+  for (let i = 0; i < points.length; i += ELEVATION_BATCH_SIZE) {
+    const batch = points.slice(i, i + ELEVATION_BATCH_SIZE);
+    results.push(...(await fetchElevationBatch(batch)));
+  }
+  return results;
+}
+
 /** Green + hazard polygons OSM has mapped within radiusM of a course's
- * centre. Returns { greens: [{id, points}], hazards: [{id, points, kind}] }
- * — kind is "bunker" or "water". Empty arrays if the course isn't mapped
- * or a request fails/times out.
+ * centre, plus real terrain elevation per green. Returns
+ * { greens: [{id, points, elevationM}], hazards: [{id, points, kind}] } —
+ * kind is "bunker" or "water", elevationM is null if the elevation lookup
+ * failed. Empty arrays if the course isn't mapped or a request fails/times
+ * out.
  *
  * Water is fetched as a separate request from green+bunker: a coastal
  * course's bay/inlet can make that one query expensive enough to time
@@ -73,13 +106,18 @@ export async function fetchCourseGeometry({ lat, lng, radiusM = 2500 }) {
     overpassFetch(`[out:json][timeout:15];way["natural"="water"](around:${radiusM},${lat},${lng});out geom;`),
   ]);
 
-  const greens = greenBunkerEls
+  const rawGreens = greenBunkerEls
     .filter((el) => el.tags?.golf === "green")
     .filter((el) => !EXCLUDE_NAME_RE.test(el.tags?.name ?? ""))
     .map((el) => ({
       id: el.id,
       points: el.geometry.map((p) => ({ lat: p.lat, lon: p.lon })),
     }));
+
+  // Real terrain elevation per green, for the "plays like" elevation
+  // adjustment — one batched request for every green on the course.
+  const elevations = await fetchElevations(rawGreens.map((g) => polygonCentroid(g.points)));
+  const greens = rawGreens.map((g, i) => ({ ...g, elevationM: elevations[i] ?? null }));
 
   const bunkers = greenBunkerEls
     .filter((el) => el.tags?.golf === "bunker")

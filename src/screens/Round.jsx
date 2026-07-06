@@ -101,7 +101,11 @@ export default function Round({ state, update, goGames }) {
       front: closestEdgeYards(here, selectedGreen.points),
       middle: yardsBetween(here, centroid),
       back: farthestVertexYards(here, selectedGreen.points),
-      middlePoint: centroid,
+      // Real terrain elevation (Copernicus DEM, fetched once at course
+      // selection) for the green — far steadier than a single GPS altitude
+      // reading, and the only way auto-detected greens get an elevation
+      // figure at all (a bare polygon centroid has no altitude of its own).
+      middlePoint: { ...centroid, altitude: selectedGreen.elevationM },
     };
   }, [here, selectedGreen]);
 

@@ -52,6 +52,11 @@ function blank() {
     profile: { name: "You", units: { distance: "yards", wind: "mph" }, currentCourse: null, avatar: null },
     recentCourses: [],
     favoriteCourses: [],
+    // Full holes/tees/greens/hazards/elevation per course, keyed by course
+    // id — fetched once ever per course, never re-fetched on a later round
+    // at the same place. Persists the same way as everything else in this
+    // file (see the localStorage-durability caveat on load()/save()).
+    courseCache: {},
   };
 }
 
@@ -139,6 +144,13 @@ export function toggleFavoriteCourse(state, course) {
     ? state.favoriteCourses.filter((c) => c.id !== course.id)
     : [...state.favoriteCourses, course];
   return { ...state, favoriteCourses };
+}
+
+/** Caches everything fetched for a course (holes, tees, greens, hazards,
+ * elevation) keyed by courseId, so picking the same course again — this
+ * round or any future one — never re-fetches it. */
+export function cacheCourseData(state, courseId, data) {
+  return { ...state, courseCache: { ...state.courseCache, [courseId]: data } };
 }
 
 export function exportData(state) {
