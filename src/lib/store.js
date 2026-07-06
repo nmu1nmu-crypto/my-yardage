@@ -251,6 +251,8 @@ export function startRound(state, {
   courseLat = null,
   courseLng = null,
   courseHoles = null,
+  courseGreens = [],
+  courseHazards = [],
   players = ["You"],
   handicapIndexes = {},
   teeRatingSlope = null,
@@ -274,6 +276,10 @@ export function startRound(state, {
     courseId,
     courseLat,
     courseLng,
+    // Green/hazard boundary polygons, fetched once here and never
+    // re-fetched during play — Round.jsx reads these locally, no network.
+    greens: courseGreens,
+    hazards: courseHazards,
     players: activePlayers,
     handicaps,
     teeRatingSlope, // kept explicitly (not just baked into courseHandicap) so a

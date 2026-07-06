@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { clubAverage, roundStats, calculatedHandicapIndex, setProfile, setHandicapIndex, removeGolfer, exportData, importData, replaceState, setAvatar, setCurrentCourse, toggleFavoriteCourse } from "../lib/store.js";
 import { currentPosition } from "../lib/geo.js";
 import { searchCourses, fetchCourseHoles, fetchCourseTees, ATTRIBUTION } from "../lib/courseApi.js";
+import { fetchCourseGeometry } from "../lib/greenApi.js";
 import { buildMailto, formatAllRoundsText } from "../lib/scorecardEmail.js";
 import { distanceUnit, convertDistance, distanceLabel } from "../lib/units.js";
 import logo from "../assets/brand/logo-1024.png";
@@ -195,8 +196,26 @@ export default function Home({ state, hero, update, onStartRound }) {
     setLoadingCourse(true);
     const lat = c.lat ?? c.latitude ?? null;
     const lng = c.lng ?? c.longitude ?? null;
-    const [holes, tees] = await Promise.all([fetchCourseHoles(c.id), fetchCourseTees(c.id)]);
-    setSelectedCourse({ id: c.id, name: c.name, holes: holes.length ? holes : null, tees, lat, lng });
+    // Green/hazard geometry is fetched here, once, alongside holes/tees —
+    // never from the Round screen. Round.jsx only ever reads it back off
+    // the round object afterwards, so playing a round makes no network
+    // calls for it (and the shared Overpass server can't be hammered by
+    // repeated visits to the Round tab).
+    const [holes, tees, geometry] = await Promise.all([
+      fetchCourseHoles(c.id),
+      fetchCourseTees(c.id),
+      fetchCourseGeometry({ lat, lng }),
+    ]);
+    setSelectedCourse({
+      id: c.id,
+      name: c.name,
+      holes: holes.length ? holes : null,
+      tees,
+      lat,
+      lng,
+      greens: geometry.greens,
+      hazards: geometry.hazards,
+    });
     const withRatings = tees.filter((t) => t.rating != null && t.slope != null);
     setSelectedTee(withRatings.length ? withRatings[0] : null);
     setLoadingCourse(false);
@@ -258,6 +277,8 @@ export default function Home({ state, hero, update, onStartRound }) {
       courseLat: course?.lat ?? null,
       courseLng: course?.lng ?? null,
       courseHoles: course?.holes ?? null,
+      courseGreens: course?.greens ?? [],
+      courseHazards: course?.hazards ?? [],
       handicapIndexes,
       teeRatingSlope: selectedTee ? { rating: selectedTee.rating, slope: selectedTee.slope } : null,
     });

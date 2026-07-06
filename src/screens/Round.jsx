@@ -9,7 +9,6 @@ import {
   closestEdgeYards,
   farthestVertexYards,
 } from "../lib/geo.js";
-import { fetchCourseGreens } from "../lib/greenApi.js";
 import { fetchWeather, playsLike } from "../lib/playslike.js";
 import {
   clubAverage,
@@ -45,7 +44,6 @@ export default function Round({ state, update, goGames }) {
   const [here, setHere] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  const [courseGreens, setCourseGreens] = useState([]); // real green polygons from OSM, fetched once per round
   const [usedGreenIds, setUsedGreenIds] = useState(() => new Set());
   const [manualOverride, setManualOverride] = useState(false);
 
@@ -69,13 +67,11 @@ export default function Round({ state, update, goGames }) {
     return () => stop();
   }, []);
 
-  useEffect(() => {
-    // Real green boundary data, when this course happens to be mapped on
-    // OpenStreetMap — fetched once per round, covering the whole course.
-    if (round?.courseLat == null || round?.courseLng == null) return;
-    fetchCourseGreens({ lat: round.courseLat, lng: round.courseLng, radiusM: 2500 }).then(setCourseGreens);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [round?.courseLat, round?.courseLng]);
+  // Green/hazard geometry was already fetched once when this course was
+  // selected on Home (see Home.jsx's pickCourse) and lives on the round
+  // object itself — no network call happens here, ever.
+  const courseGreens = round?.greens ?? [];
+  const courseHazards = round?.hazards ?? [];
 
   // Nearest not-yet-played green to wherever the golfer is standing right
   // now. There's no reliable hole-number tag in the open data, so "nearest,
@@ -95,6 +91,7 @@ export default function Round({ state, update, goGames }) {
       }
     }
     return bestYards <= MAX_GREEN_RANGE_YARDS ? best : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [here, courseGreens, usedGreenIds]);
 
   const autoDistances = useMemo(() => {
@@ -107,6 +104,15 @@ export default function Round({ state, update, goGames }) {
       middlePoint: centroid,
     };
   }, [here, selectedGreen]);
+
+  // Hazards near this specific green, not the whole course — a course-wide
+  // fetch pulls in every bunker/pond, most of which belong to other holes.
+  const nearbyHazards = useMemo(() => {
+    if (!selectedGreen || !courseHazards.length) return [];
+    const centroid = polygonCentroid(selectedGreen.points);
+    return courseHazards.filter((h) => yardsBetween(centroid, polygonCentroid(h.points)) <= 200);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedGreen, courseHazards]);
 
   const usingAuto = !!autoDistances && !manualOverride;
   const manuallyMarked = green.front && green.middle && green.back;
@@ -249,6 +255,7 @@ export default function Round({ state, update, goGames }) {
           <>
             <GreenView
               points={usingAuto ? selectedGreen.points : null}
+              hazards={usingAuto ? nearbyHazards : []}
               here={here}
               isReal={usingAuto}
               front={convertDistance(distances.front, dUnit)}
