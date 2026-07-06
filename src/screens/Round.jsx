@@ -118,6 +118,15 @@ export default function Round({ state, update, goGames }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedGreen, courseHazards]);
 
+  // Carry distance to each hazard's near edge from wherever the golfer is
+  // standing right now — same live-position math as the green itself.
+  const hazardDistances = useMemo(() => {
+    if (!here || !nearbyHazards.length) return [];
+    return nearbyHazards
+      .map((h) => ({ kind: h.kind, yards: closestEdgeYards(here, h.points) }))
+      .sort((a, b) => a.yards - b.yards);
+  }, [here, nearbyHazards]);
+
   const usingAuto = !!autoDistances && !manualOverride;
   const manuallyMarked = green.front && green.middle && green.back;
 
@@ -287,6 +296,15 @@ export default function Round({ state, update, goGames }) {
                 <span className="small" style={{ opacity: 0.75 }}>Calm conditions</span>
               )}
             </div>
+            {usingAuto && hazardDistances.length > 0 && (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                {hazardDistances.map((h, i) => (
+                  <span key={i} className="chip sky" style={{ height: "auto", padding: "5px 10px" }}>
+                    {h.kind === "bunker" ? "🏖" : "💧"} {convertDistance(h.yards, dUnit)} {distanceLabel(dUnit)}
+                  </span>
+                ))}
+              </div>
+            )}
           </>
         ) : (
           <>

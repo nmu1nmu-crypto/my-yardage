@@ -88,6 +88,12 @@ export function save(state) {
  * old rounds keep whatever name was typed at the time, unchanged). `units`
  * merges shallowly with the existing units so setting one (e.g. distance)
  * doesn't clobber the other (e.g. wind). */
+function renameKey(obj, oldKey, newKey) {
+  if (!obj || !(oldKey in obj)) return obj;
+  const { [oldKey]: value, ...rest } = obj;
+  return { ...rest, [newKey]: value };
+}
+
 export function setProfile(state, updates) {
   const oldName = state.profile?.name;
   const name = updates.name ?? oldName;
@@ -96,7 +102,22 @@ export function setProfile(state, updates) {
     golfers[name] = golfers[oldName];
   }
   const units = { ...state.profile?.units, ...updates.units };
-  return { ...state, profile: { ...state.profile, ...updates, name, units }, golfers };
+
+  // A round already in progress freezes the golfer's name at every hole's
+  // strokes and the handicap map — rename those too, or the Scorecard/Games
+  // screens keep showing the old name for the rest of that round. Finished
+  // rounds are left untouched; they're a record of who played, as it was.
+  let activeRound = state.activeRound;
+  if (activeRound && oldName && name && oldName !== name && activeRound.players.includes(oldName)) {
+    activeRound = {
+      ...activeRound,
+      players: activeRound.players.map((p) => (p === oldName ? name : p)),
+      handicaps: renameKey(activeRound.handicaps, oldName, name),
+      holes: activeRound.holes.map((h) => ({ ...h, strokes: renameKey(h.strokes, oldName, name) })),
+    };
+  }
+
+  return { ...state, profile: { ...state.profile, ...updates, name, units }, golfers, activeRound };
 }
 
 /** Sets a manual default Handicap Index for a player, from the profile
