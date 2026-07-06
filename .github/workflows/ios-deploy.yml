@@ -52,6 +52,14 @@ jobs:
       - name: Sync Capacitor iOS
         run: npx cap sync ios
 
+- name: Inject required Info.plist keys after cap sync
+        run: |
+          PLIST=ios/App/App/Info.plist
+          LOC="My Golf Distances uses your location on the course to measure shot distances and calculate plays-like yardages. Your location never leaves your device."
+          /usr/libexec/PlistBuddy -c "Add :NSLocationAlwaysAndWhenInUseUsageDescription string '$LOC'" $PLIST 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :NSLocationWhenInUseUsageDescription string '$LOC'" $PLIST 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :ITSAppUsesNonExemptEncryption bool NO" $PLIST 2>/dev/null || true
+
       - name: Ensure location usage descriptions exist
         run: |
           # Capacitor regenerates Info.plist on every sync, potentially removing
