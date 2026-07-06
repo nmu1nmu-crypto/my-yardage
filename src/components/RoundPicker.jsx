@@ -14,7 +14,7 @@ export default function RoundPicker({ state, selectedId, onSelect }) {
   if (items.length <= 1) return null;
 
   return (
-    <div className="chips" style={{ marginBottom: 10, overflowX: "auto", flexWrap: "nowrap" }}>
+    <div className="chips hscroll" style={{ marginBottom: 10, overflowX: "auto", flexWrap: "nowrap" }}>
       {items.map((it) => (
         <button
           key={it.id}

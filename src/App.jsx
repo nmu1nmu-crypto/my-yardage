@@ -15,12 +15,32 @@ const TABS = [
   { id: "bag", label: "Bag", glyph: "🏌️" },
 ];
 
+// Elements that legitimately scroll — everything else is the fixed app
+// shell and must never move under a touch drag.
+const SCROLLABLE_SELECTOR = ".screen, .picker-body, .course-sheet, .hscroll";
+
 export default function App() {
   const [state, setState] = useState(store.load);
   const [tab, setTab] = useState("home");
   const [hero] = useState(nextHeroImage);
 
   useEffect(() => store.save(state), [state]);
+
+  useEffect(() => {
+    // CSS overflow:hidden alone doesn't stop iOS Safari/WKWebView's
+    // touch-drag rubber-band effect — it only governs programmatic/wheel
+    // scrolling. The only reliable fix is intercepting the touch itself:
+    // block the drag unless it started inside a container that's meant to
+    // scroll, so the fixed shell (tabbar included) truly can't be dragged
+    // off-screen while .screen/.picker-body/etc keep scrolling normally.
+    function blockOuterDrag(e) {
+      if (!e.target.closest(SCROLLABLE_SELECTOR)) {
+        e.preventDefault();
+      }
+    }
+    document.addEventListener("touchmove", blockOuterDrag, { passive: false });
+    return () => document.removeEventListener("touchmove", blockOuterDrag);
+  }, []);
 
   const update = (fn, ...args) => setState((s) => fn(s, ...args));
 
