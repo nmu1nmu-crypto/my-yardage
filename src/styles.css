@@ -209,11 +209,18 @@ body {
 .clubbar .lbl { font-size: 11px; color: rgba(242, 246, 242, 0.55); margin-top: 3px; }
 
 .chip.sky { background: rgba(255, 255, 255, 0.14); color: var(--sky-100); border: none; }
-.green-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 4px; }
-.green-grid .g { text-align: center; }
-.green-grid .g .lbl { font-size: 11px; opacity: 0.75; }
-.green-grid .g .val { font-size: 22px; font-weight: 600; margin-top: 2px; }
-.green-grid .g.active .val { color: var(--sky-400); }
+
+.green-view { position: relative; margin-top: 4px; }
+.green-view-label {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  text-align: center; display: flex; flex-direction: column; align-items: center;
+}
+.green-view-label .lbl { font-size: 11px; opacity: 0.75; }
+.green-view-label .val { font-size: 22px; font-weight: 600; margin-top: 2px; }
+.green-view-label.back { top: 4px; }
+.green-view-label.middle { top: 50%; transform: translate(-50%, -50%); }
+.green-view-label.middle .val { color: var(--sky-400); }
+.green-view-label.front { bottom: 30px; }
 
 input[type="number"], input[type="text"], input[type="email"], select {
   width: 100%; height: 44px; padding: 0 12px;

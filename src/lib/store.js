@@ -248,6 +248,8 @@ const MAX_PLAYERS = 4;
 export function startRound(state, {
   course = "New round",
   courseId = null,
+  courseLat = null,
+  courseLng = null,
   courseHoles = null,
   players = ["You"],
   handicapIndexes = {},
@@ -270,6 +272,8 @@ export function startRound(state, {
     id: Date.now(),
     course,
     courseId,
+    courseLat,
+    courseLng,
     players: activePlayers,
     handicaps,
     teeRatingSlope, // kept explicitly (not just baked into courseHandicap) so a

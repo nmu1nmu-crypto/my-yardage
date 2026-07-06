@@ -193,16 +193,20 @@ export default function Home({ state, hero, update, onStartRound }) {
 
   async function pickCourse(c) {
     setLoadingCourse(true);
+    const lat = c.lat ?? c.latitude ?? null;
+    const lng = c.lng ?? c.longitude ?? null;
     const [holes, tees] = await Promise.all([fetchCourseHoles(c.id), fetchCourseTees(c.id)]);
-    setSelectedCourse({ id: c.id, name: c.name, holes: holes.length ? holes : null, tees });
+    setSelectedCourse({ id: c.id, name: c.name, holes: holes.length ? holes : null, tees, lat, lng });
     const withRatings = tees.filter((t) => t.rating != null && t.slope != null);
     setSelectedTee(withRatings.length ? withRatings[0] : null);
     setLoadingCourse(false);
-    update(setCurrentCourse, { id: c.id, name: c.name, city: c.city, state: c.state });
+    update(setCurrentCourse, { id: c.id, name: c.name, city: c.city, state: c.state, lat, lng });
   }
 
   function courseRow(c) {
     const isFav = state.favoriteCourses.some((f) => f.id === c.id);
+    const lat = c.lat ?? c.latitude ?? null;
+    const lng = c.lng ?? c.longitude ?? null;
     return (
       <div key={c.id} className="list-row row course-row">
         <button
@@ -223,7 +227,7 @@ export default function Home({ state, hero, update, onStartRound }) {
           <button
             className="star-btn"
             aria-label={isFav ? "Remove from favourites" : "Add to favourites"}
-            onClick={() => update(toggleFavoriteCourse, { id: c.id, name: c.name, city: c.city, state: c.state })}
+            onClick={() => update(toggleFavoriteCourse, { id: c.id, name: c.name, city: c.city, state: c.state, lat, lng })}
           >
             {isFav ? "★" : "☆"}
           </button>
@@ -251,6 +255,8 @@ export default function Home({ state, hero, update, onStartRound }) {
       players: playerNames,
       course: course?.name || "New round",
       courseId: course?.id ?? null,
+      courseLat: course?.lat ?? null,
+      courseLng: course?.lng ?? null,
       courseHoles: course?.holes ?? null,
       handicapIndexes,
       teeRatingSlope: selectedTee ? { rating: selectedTee.rating, slope: selectedTee.slope } : null,

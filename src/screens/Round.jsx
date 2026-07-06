@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { currentPosition, yardsBetween, bearingDegrees, elevationDeltaFeet } from "../lib/geo.js";
+import {
+  currentPosition,
+  watchPosition,
+  yardsBetween,
+  bearingDegrees,
+  elevationDeltaFeet,
+  polygonCentroid,
+  closestEdgeYards,
+  farthestVertexYards,
+} from "../lib/geo.js";
+import { fetchCourseGreens } from "../lib/greenApi.js";
 import { fetchWeather, playsLike } from "../lib/playslike.js";
 import {
   clubAverage,
@@ -12,6 +22,7 @@ import {
 } from "../lib/store.js";
 import { buildMailto, formatRoundText } from "../lib/scorecardEmail.js";
 import { distanceUnit, windUnit, convertDistance, distanceLabel } from "../lib/units.js";
+import GreenView from "../components/GreenView.jsx";
 
 const GREEN_STEPS = [
   { key: "front", label: "front of green" },
@@ -19,42 +30,103 @@ const GREEN_STEPS = [
   { key: "back", label: "back of green" },
 ];
 
+// Generous cutoff — this only exists to reject GPS glitches (e.g. an
+// indoor multipath fix jumping miles away), not to second-guess a real
+// long par 5 approach.
+const MAX_GREEN_RANGE_YARDS = 700;
+
 export default function Round({ state, update, goGames }) {
   const round = state.activeRound;
   const dUnit = distanceUnit(state);
   const wUnit = windUnit(state);
   const [clubId, setClubId] = useState(state.bag[4]?.id ?? state.bag[0]?.id);
   const [weather, setWeather] = useState(null);
-  const [green, setGreen] = useState({ front: null, middle: null, back: null }); // GPS points the golfer walks and taps once per hole
+  const [green, setGreen] = useState({ front: null, middle: null, back: null }); // manual fallback: GPS points the golfer walks and taps once per hole
   const [here, setHere] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [courseGreens, setCourseGreens] = useState([]); // real green polygons from OSM, fetched once per round
+  const [usedGreenIds, setUsedGreenIds] = useState(() => new Set());
+  const [manualOverride, setManualOverride] = useState(false);
 
   useEffect(() => {
-    // One position + one weather fetch when the screen opens. Both optional.
-    currentPosition()
-      .then((pos) => {
-        setHere(pos);
-        return fetchWeather(pos).then(setWeather);
+    // Continuous GPS — distances to the green should update as the golfer
+    // walks, not just once when the screen opens. Weather is still a
+    // one-shot fetch off the first fix (it doesn't change hole to hole).
+    let stop = () => {};
+    let gotWeather = false;
+    watchPosition((pos) => {
+      setHere(pos);
+      if (!gotWeather) {
+        gotWeather = true;
+        fetchWeather(pos).then(setWeather).catch(() => {});
+      }
+    })
+      .then((stopFn) => {
+        stop = stopFn;
       })
-      .catch(() => setMsg("GPS or weather unavailable — distances still work once GPS wakes up."));
+      .catch(() => setMsg("GPS unavailable — distances need location access."));
+    return () => stop();
   }, []);
 
-  const distances = useMemo(() => {
-    if (!here) return { front: null, middle: null, back: null };
+  useEffect(() => {
+    // Real green boundary data, when this course happens to be mapped on
+    // OpenStreetMap — fetched once per round, covering the whole course.
+    if (round?.courseLat == null || round?.courseLng == null) return;
+    fetchCourseGreens({ lat: round.courseLat, lng: round.courseLng, radiusM: 2500 }).then(setCourseGreens);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [round?.courseLat, round?.courseLng]);
+
+  // Nearest not-yet-played green to wherever the golfer is standing right
+  // now. There's no reliable hole-number tag in the open data, so "nearest,
+  // not already used this round" is the best available heuristic — the
+  // manual override below exists for when it guesses wrong.
+  const selectedGreen = useMemo(() => {
+    if (!here || !courseGreens.length) return null;
+    let best = null;
+    let bestYards = Infinity;
+    for (const g of courseGreens) {
+      if (usedGreenIds.has(g.id)) continue;
+      const centroid = polygonCentroid(g.points);
+      const d = yardsBetween(here, centroid);
+      if (d < bestYards) {
+        bestYards = d;
+        best = g;
+      }
+    }
+    return bestYards <= MAX_GREEN_RANGE_YARDS ? best : null;
+  }, [here, courseGreens, usedGreenIds]);
+
+  const autoDistances = useMemo(() => {
+    if (!here || !selectedGreen) return null;
+    const centroid = polygonCentroid(selectedGreen.points);
     return {
-      front: green.front ? yardsBetween(here, green.front) : null,
-      middle: green.middle ? yardsBetween(here, green.middle) : null,
-      back: green.back ? yardsBetween(here, green.back) : null,
+      front: closestEdgeYards(here, selectedGreen.points),
+      middle: yardsBetween(here, centroid),
+      back: farthestVertexYards(here, selectedGreen.points),
+      middlePoint: centroid,
     };
-  }, [here, green]);
+  }, [here, selectedGreen]);
+
+  const usingAuto = !!autoDistances && !manualOverride;
+  const manuallyMarked = green.front && green.middle && green.back;
+
+  const distances = usingAuto
+    ? { front: autoDistances.front, middle: autoDistances.middle, back: autoDistances.back }
+    : {
+        front: here && green.front ? yardsBetween(here, green.front) : null,
+        middle: here && green.middle ? yardsBetween(here, green.middle) : null,
+        back: here && green.back ? yardsBetween(here, green.back) : null,
+      };
+  const middlePoint = usingAuto ? autoDistances.middlePoint : green.middle;
 
   const adjusted = useMemo(() => {
-    if (distances.middle == null) return null;
-    const bearing = bearingDegrees(here, green.middle);
-    const elevationDeltaFt = elevationDeltaFeet(here, green.middle);
+    if (distances.middle == null || !here || !middlePoint) return null;
+    const bearing = bearingDegrees(here, middlePoint);
+    const elevationDeltaFt = elevationDeltaFeet(here, middlePoint);
     return playsLike({ yards: distances.middle, shotBearingDeg: bearing, weather, elevationDeltaFt, windUnit: wUnit });
-  }, [distances.middle, weather, here, green.middle]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [distances.middle, weather, here, middlePoint]);
 
   if (!round) {
     return (
@@ -108,8 +180,17 @@ export default function Round({ state, update, goGames }) {
     setGreen({ front: null, middle: null, back: null });
   }
 
+  function advanceHole() {
+    if (usingAuto && selectedGreen) {
+      setUsedGreenIds((s) => new Set([...s, selectedGreen.id]));
+    }
+    resetGreen();
+    setManualOverride(false);
+    update(nextHole);
+  }
+
   const last = round.lastLogged;
-  const greenDone = green.front && green.middle && green.back;
+  const greenReady = usingAuto || manuallyMarked;
 
   return (
     <>
@@ -128,15 +209,22 @@ export default function Round({ state, update, goGames }) {
       <div className="card sky">
         <div className="row">
           <strong style={{ fontSize: 13 }}>⛳ Green complex</strong>
-          {greenDone && (
-            <div style={{ display: "flex", gap: 6 }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            {greenReady && (
+              <span className="chip sky" style={{ padding: "3px 10px", height: "auto", cursor: "default" }}>
+                {usingAuto ? "📡 Auto" : "📍 Manual"}
+              </span>
+            )}
+            {usingAuto && (
               <button
                 className="chip sky"
                 style={{ padding: "3px 10px", height: "auto" }}
-                onClick={refreshPosition}
+                onClick={() => setManualOverride(true)}
               >
-                ↻ Refresh
+                Not this green?
               </button>
+            )}
+            {!usingAuto && manuallyMarked && (
               <button
                 className="chip sky"
                 style={{ padding: "3px 10px", height: "auto" }}
@@ -144,26 +232,29 @@ export default function Round({ state, update, goGames }) {
               >
                 Re-pin
               </button>
-            </div>
-          )}
+            )}
+            {!usingAuto && manualOverride && autoDistances && (
+              <button
+                className="chip sky"
+                style={{ padding: "3px 10px", height: "auto" }}
+                onClick={() => setManualOverride(false)}
+              >
+                Use auto-detected
+              </button>
+            )}
+          </div>
         </div>
 
-        {greenDone ? (
+        {greenReady ? (
           <>
-            <div className="green-grid">
-              <div className="g">
-                <div className="lbl">Front</div>
-                <div className="val num">{convertDistance(distances.front, dUnit) ?? "—"}</div>
-              </div>
-              <div className="g active">
-                <div className="lbl">Middle</div>
-                <div className="val num">{convertDistance(distances.middle, dUnit) ?? "—"}</div>
-              </div>
-              <div className="g">
-                <div className="lbl">Back</div>
-                <div className="val num">{convertDistance(distances.back, dUnit) ?? "—"}</div>
-              </div>
-            </div>
+            <GreenView
+              points={usingAuto ? selectedGreen.points : null}
+              here={here}
+              isReal={usingAuto}
+              front={convertDistance(distances.front, dUnit)}
+              middle={convertDistance(distances.middle, dUnit)}
+              back={convertDistance(distances.back, dUnit)}
+            />
             <div className="row" style={{ marginTop: 14, alignItems: "flex-end" }}>
               <span className="small" style={{ opacity: 0.8 }}>Plays like ({distanceLabel(dUnit)})</span>
               <span className="num" style={{ fontSize: 32, fontWeight: 600, color: "var(--gold-200)" }}>
@@ -189,8 +280,11 @@ export default function Round({ state, update, goGames }) {
         ) : (
           <>
             <p className="small" style={{ opacity: 0.85, marginTop: 4 }}>
-              Walk to the green once per hole and tap as you reach each spot —
-              distances and plays-like follow for the rest of the hole.
+              {manualOverride && autoDistances
+                ? "Switched to manual marking — tap \"Use auto-detected\" above to switch back."
+                : courseGreens.length
+                  ? "No mapped green nearby yet — walk to the green once per hole and tap as you reach each spot."
+                  : "This course's green isn't mapped — walk to the green once per hole and tap as you reach each spot."}
             </p>
             <button
               className="btn"
@@ -278,7 +372,7 @@ export default function Round({ state, update, goGames }) {
       </div>
 
       <div className="row" style={{ marginTop: 12, gap: 8 }}>
-        <button className="btn ghost" style={{ flex: 1 }} onClick={() => { resetGreen(); update(nextHole); }}>
+        <button className="btn ghost" style={{ flex: 1 }} onClick={advanceHole}>
           Next hole →
         </button>
         <button className="btn ghost" style={{ flex: 1 }} onClick={goGames}>
