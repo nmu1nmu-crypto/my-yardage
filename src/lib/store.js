@@ -285,6 +285,8 @@ export function startRound(state, {
   courseLng = null,
   courseHoles = null,
   courseGreens = [],
+  courseFairways = [],
+  courseTeeBoxes = [],
   courseHazards = [],
   players = ["You"],
   handicapIndexes = {},
@@ -309,9 +311,13 @@ export function startRound(state, {
     courseId,
     courseLat,
     courseLng,
-    // Green/hazard boundary polygons, fetched once here and never
-    // re-fetched during play — Round.jsx reads these locally, no network.
+    // Green/fairway/tee/hazard boundary polygons, fetched once here and
+    // never re-fetched during play — Round.jsx reads these locally, no
+    // network. teeBoxes are OSM golf=tee polygons (where you tee off from),
+    // distinct from teeRatingSlope below (the OpenGolfAPI tee SET's rating).
     greens: courseGreens,
+    fairways: courseFairways,
+    teeBoxes: courseTeeBoxes,
     hazards: courseHazards,
     players: activePlayers,
     handicaps,

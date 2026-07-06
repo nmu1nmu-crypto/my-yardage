@@ -86,27 +86,30 @@ async function fetchElevations(points) {
   return results;
 }
 
-/** Green + hazard polygons OSM has mapped within radiusM of a course's
- * centre, plus real terrain elevation per green. Returns
- * { greens: [{id, points, elevationM}], hazards: [{id, points, kind}] } —
- * kind is "bunker" or "water", elevationM is null if the elevation lookup
- * failed. Empty arrays if the course isn't mapped or a request fails/times
- * out.
+/** Green/fairway/tee/hazard polygons OSM has mapped within radiusM of a
+ * course's centre, plus real terrain elevation per green. Returns
+ * { greens: [{id, points, elevationM}], fairways: [{id, points}],
+ *   teeBoxes: [{id, points}], hazards: [{id, points, kind}] } — kind is
+ * "bunker" or "water", elevationM is null if the elevation lookup failed.
+ * Empty arrays if the course isn't mapped or a request fails/times out.
  *
- * Water is fetched as a separate request from green+bunker: a coastal
- * course's bay/inlet can make that one query expensive enough to time
- * out, and it must never be able to take the greens down with it. */
+ * Water is fetched as a separate request from the rest: a coastal course's
+ * bay/inlet can make that one query expensive enough to time out, and it
+ * must never be able to take the greens/fairways/tees down with it.
+ * Fairways and tees are small, golf-specific features (unlike natural=water,
+ * nothing else gets tagged golf=fairway), so they're safe to bundle with
+ * green/bunker in one request. */
 export async function fetchCourseGeometry({ lat, lng, radiusM = 2500 }) {
-  if (lat == null || lng == null) return { greens: [], hazards: [] };
+  if (lat == null || lng == null) return { greens: [], fairways: [], teeBoxes: [], hazards: [] };
 
-  const [greenBunkerEls, waterEls] = await Promise.all([
+  const [courseEls, waterEls] = await Promise.all([
     overpassFetch(
-      `[out:json][timeout:20];(way["golf"="green"](around:${radiusM},${lat},${lng});way["golf"="bunker"](around:${radiusM},${lat},${lng}););out geom;`
+      `[out:json][timeout:20];(way["golf"="green"](around:${radiusM},${lat},${lng});way["golf"="bunker"](around:${radiusM},${lat},${lng});way["golf"="fairway"](around:${radiusM},${lat},${lng});way["golf"="tee"](around:${radiusM},${lat},${lng}););out geom;`
     ),
     overpassFetch(`[out:json][timeout:15];way["natural"="water"](around:${radiusM},${lat},${lng});out geom;`),
   ]);
 
-  const rawGreens = greenBunkerEls
+  const rawGreens = courseEls
     .filter((el) => el.tags?.golf === "green")
     .filter((el) => !EXCLUDE_NAME_RE.test(el.tags?.name ?? ""))
     .map((el) => ({
@@ -119,7 +122,15 @@ export async function fetchCourseGeometry({ lat, lng, radiusM = 2500 }) {
   const elevations = await fetchElevations(rawGreens.map((g) => polygonCentroid(g.points)));
   const greens = rawGreens.map((g, i) => ({ ...g, elevationM: elevations[i] ?? null }));
 
-  const bunkers = greenBunkerEls
+  const fairways = courseEls
+    .filter((el) => el.tags?.golf === "fairway")
+    .map((el) => ({ id: el.id, points: el.geometry.map((p) => ({ lat: p.lat, lon: p.lon })) }));
+
+  const teeBoxes = courseEls
+    .filter((el) => el.tags?.golf === "tee")
+    .map((el) => ({ id: el.id, points: el.geometry.map((p) => ({ lat: p.lat, lon: p.lon })) }));
+
+  const bunkers = courseEls
     .filter((el) => el.tags?.golf === "bunker")
     .map((el) => ({ id: el.id, kind: "bunker", points: el.geometry.map((p) => ({ lat: p.lat, lon: p.lon })) }));
 
@@ -127,5 +138,5 @@ export async function fetchCourseGeometry({ lat, lng, radiusM = 2500 }) {
     .map((el) => ({ id: el.id, kind: "water", points: el.geometry.map((p) => ({ lat: p.lat, lon: p.lon })) }))
     .filter((h) => spanMetres(h.points) <= MAX_HAZARD_SPAN_M);
 
-  return { greens, hazards: [...bunkers, ...water] };
+  return { greens, fairways, teeBoxes, hazards: [...bunkers, ...water] };
 }

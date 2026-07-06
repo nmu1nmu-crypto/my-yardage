@@ -157,3 +157,59 @@ export function farthestVertexYards(here, points) {
   }
   return Math.round(metresToYards(best));
 }
+
+// ---- hole matching --------------------------------------------------
+// OSM has no reliable "this fairway/green/tee belongs to hole 7" tag
+// (route=golf relations exist in the schema but are essentially never
+// populated — confirmed empty even at Pebble Beach). So a hole's fairway
+// and tee are found the same way the green itself is: geometrically,
+// by proximity. A real fairway polygon runs from tee to green and
+// typically touches or nearly touches both, so "nearest fairway whose
+// boundary comes close to the green's boundary" is a solid heuristic —
+// and likewise for "nearest tee close to that fairway's boundary."
+
+/** Closest distance in metres between any point of polygon A and any point
+ * of polygon B. O(n*m) — fine at these sizes (tens of points each),
+ * called once per hole change, not per GPS tick. */
+function minDistanceBetweenPolygonsM(pointsA, pointsB) {
+  let best = Infinity;
+  for (const a of pointsA) {
+    for (const b of pointsB) {
+      const d = haversineMetres(a, b);
+      if (d < best) best = d;
+    }
+  }
+  return best;
+}
+
+/** Nearest not-yet-used fairway whose boundary comes within maxDistM of the
+ * green's boundary — null if nothing qualifies (never guessed). */
+export function findConnectedFairway(green, fairways, usedIds, maxDistM = 60) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const f of fairways) {
+    if (usedIds.has(f.id)) continue;
+    const d = minDistanceBetweenPolygonsM(green.points, f.points);
+    if (d < bestDist) {
+      bestDist = d;
+      best = f;
+    }
+  }
+  return bestDist <= maxDistM ? best : null;
+}
+
+/** Nearest not-yet-used tee box whose boundary comes within maxDistM of the
+ * fairway's boundary — null if nothing qualifies. */
+export function findConnectedTee(fairway, teeBoxes, usedIds, maxDistM = 60) {
+  let best = null;
+  let bestDist = Infinity;
+  for (const t of teeBoxes) {
+    if (usedIds.has(t.id)) continue;
+    const d = minDistanceBetweenPolygonsM(fairway.points, t.points);
+    if (d < bestDist) {
+      bestDist = d;
+      best = t;
+    }
+  }
+  return bestDist <= maxDistM ? best : null;
+}

@@ -204,9 +204,9 @@ export default function Home({ state, hero, update, onStartRound }) {
     // round makes no network calls for any of it (and the shared Overpass
     // server can't be hammered by repeated visits to the same course).
     const cached = state.courseCache?.[c.id];
-    let holes, tees, greens, hazards;
+    let holes, tees, greens, fairways, teeBoxes, hazards;
     if (cached) {
-      ({ holes, tees, greens, hazards } = cached);
+      ({ holes, tees, greens, fairways, teeBoxes, hazards } = cached);
     } else {
       const [h, t, geometry] = await Promise.all([
         fetchCourseHoles(c.id),
@@ -216,8 +216,10 @@ export default function Home({ state, hero, update, onStartRound }) {
       holes = h;
       tees = t;
       greens = geometry.greens;
+      fairways = geometry.fairways;
+      teeBoxes = geometry.teeBoxes;
       hazards = geometry.hazards;
-      update(cacheCourseData, c.id, { holes, tees, greens, hazards, lat, lng });
+      update(cacheCourseData, c.id, { holes, tees, greens, fairways, teeBoxes, hazards, lat, lng });
     }
 
     setSelectedCourse({
@@ -228,6 +230,8 @@ export default function Home({ state, hero, update, onStartRound }) {
       lat,
       lng,
       greens,
+      fairways,
+      teeBoxes,
       hazards,
     });
     const withRatings = tees.filter((t) => t.rating != null && t.slope != null);
