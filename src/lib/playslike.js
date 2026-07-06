@@ -1,7 +1,7 @@
 // "Plays like" = raw distance adjusted for wind and elevation.
 // Weather comes from Open-Meteo (free, no key). If offline, we fall back
 // to raw distance and say so — never invent conditions.
-import { convertWind } from "./units.js";
+import { convertWind, distanceLabel } from "./units.js";
 
 const CACHE_MS = 15 * 60 * 1000; // one weather fetch per quarter hour is plenty
 let cache = null;
@@ -32,7 +32,7 @@ export async function fetchWeather({ lat, lon }) {
  *  - elevation: 1 yard per yard of rise/fall (a 15 ft uphill shot plays ~5 yds longer)
  *  - temperature: ±1 yard per 10°C from 20°C baseline on a mid-iron
  */
-export function playsLike({ yards, shotBearingDeg, weather, elevationDeltaFt = 0, windUnit = "mph" }) {
+export function playsLike({ yards, shotBearingDeg, weather, elevationDeltaFt = 0, windUnit = "mph", distanceUnit = "yards" }) {
   if (!weather) {
     return { adjusted: yards, parts: [], note: "No weather — raw yardage" };
   }
@@ -56,10 +56,14 @@ export function playsLike({ yards, shotBearingDeg, weather, elevationDeltaFt = 0
 
   const elevAdj = elevationDeltaFt / 3; // 3 ft ≈ 1 yard of play
   if (Math.abs(elevAdj) >= 1) {
+    const elevDisplay =
+      distanceUnit === "meters"
+        ? Math.abs(Math.round(elevationDeltaFt * 0.3048))
+        : Math.abs(Math.round(elevationDeltaFt / 3));
     parts.push({
       label: elevationDeltaFt > 0 ? "uphill" : "downhill",
       yards: Math.round(elevAdj),
-      detail: `${Math.abs(Math.round(elevationDeltaFt))} ft`,
+      detail: `${elevDisplay} ${distanceLabel(distanceUnit)}`,
     });
   }
 

@@ -134,7 +134,7 @@ export default function Round({ state, update, goGames }) {
     if (distances.middle == null || !here || !middlePoint) return null;
     const bearing = bearingDegrees(here, middlePoint);
     const elevationDeltaFt = elevationDeltaFeet(here, middlePoint);
-    return playsLike({ yards: distances.middle, shotBearingDeg: bearing, weather, elevationDeltaFt, windUnit: wUnit });
+    return playsLike({ yards: distances.middle, shotBearingDeg: bearing, weather, elevationDeltaFt, windUnit: wUnit, distanceUnit: dUnit });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [distances.middle, weather, here, middlePoint]);
 
