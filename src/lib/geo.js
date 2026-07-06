@@ -171,7 +171,7 @@ export function farthestVertexYards(here, points) {
 /** Closest distance in metres between any point of polygon A and any point
  * of polygon B. O(n*m) — fine at these sizes (tens of points each),
  * called once per hole change, not per GPS tick. */
-function minDistanceBetweenPolygonsM(pointsA, pointsB) {
+export function minDistanceBetweenPolygonsM(pointsA, pointsB) {
   let best = Infinity;
   for (const a of pointsA) {
     for (const b of pointsB) {

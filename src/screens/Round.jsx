@@ -8,6 +8,10 @@ import {
   polygonCentroid,
   closestEdgeYards,
   farthestVertexYards,
+  findConnectedFairway,
+  findConnectedTee,
+  minDistanceBetweenPolygonsM,
+  metresToYards,
 } from "../lib/geo.js";
 import { fetchWeather, playsLike } from "../lib/playslike.js";
 import {
@@ -21,7 +25,7 @@ import {
 } from "../lib/store.js";
 import { buildMailto, formatRoundText } from "../lib/scorecardEmail.js";
 import { distanceUnit, windUnit, convertDistance, distanceLabel } from "../lib/units.js";
-import GreenView from "../components/GreenView.jsx";
+import HoleView from "../components/HoleView.jsx";
 
 const GREEN_STEPS = [
   { key: "front", label: "front of green" },
@@ -45,6 +49,8 @@ export default function Round({ state, update, goGames }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [usedGreenIds, setUsedGreenIds] = useState(() => new Set());
+  const [usedFairwayIds, setUsedFairwayIds] = useState(() => new Set());
+  const [usedTeeIds, setUsedTeeIds] = useState(() => new Set());
   const [manualOverride, setManualOverride] = useState(false);
 
   useEffect(() => {
@@ -67,10 +73,12 @@ export default function Round({ state, update, goGames }) {
     return () => stop();
   }, []);
 
-  // Green/hazard geometry was already fetched once when this course was
-  // selected on Home (see Home.jsx's pickCourse) and lives on the round
-  // object itself — no network call happens here, ever.
+  // Green/fairway/tee/hazard geometry was already fetched once when this
+  // course was selected on Home (see Home.jsx's pickCourse) and lives on
+  // the round object itself — no network call happens here, ever.
   const courseGreens = round?.greens ?? [];
+  const courseFairways = round?.fairways ?? [];
+  const courseTeeBoxes = round?.teeBoxes ?? [];
   const courseHazards = round?.hazards ?? [];
 
   // Nearest not-yet-played green to wherever the golfer is standing right
@@ -109,23 +117,52 @@ export default function Round({ state, update, goGames }) {
     };
   }, [here, selectedGreen]);
 
-  // Hazards near this specific green, not the whole course — a course-wide
-  // fetch pulls in every bunker/pond, most of which belong to other holes.
+  // No route=golf relation exists in the open data to say "this fairway/
+  // tee belongs to this green" (checked live — empty even at Pebble
+  // Beach), so both are found geometrically: nearest not-yet-used fairway
+  // touching the green, then nearest not-yet-used tee touching that
+  // fairway. Shows the whole hole when it works, just the green when it
+  // doesn't — never a guessed connection.
+  const selectedFairway = useMemo(() => {
+    if (!selectedGreen || !courseFairways.length) return null;
+    return findConnectedFairway(selectedGreen, courseFairways, usedFairwayIds);
+  }, [selectedGreen, courseFairways, usedFairwayIds]);
+
+  const selectedTee = useMemo(() => {
+    if (!selectedFairway || !courseTeeBoxes.length) return null;
+    return findConnectedTee(selectedFairway, courseTeeBoxes, usedTeeIds);
+  }, [selectedFairway, courseTeeBoxes, usedTeeIds]);
+
+  // Hazards relevant to what's currently on screen — boundary-to-boundary
+  // proximity to the green itself, or to the fairway already matched to
+  // this hole (a fairway bunker), not a raw radius circle around the
+  // golfer or green centroid. A radius circle on a dense course like
+  // Pebble Beach pulls in bunkers that belong to the next hole over;
+  // checking against the actual matched fairway polygon doesn't.
   const nearbyHazards = useMemo(() => {
     if (!selectedGreen || !courseHazards.length) return [];
-    const centroid = polygonCentroid(selectedGreen.points);
-    return courseHazards.filter((h) => yardsBetween(centroid, polygonCentroid(h.points)) <= 200);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedGreen, courseHazards]);
+    return courseHazards.filter((h) => {
+      const nearGreen = metresToYards(minDistanceBetweenPolygonsM(selectedGreen.points, h.points)) <= 40;
+      const nearFairway = selectedFairway
+        ? metresToYards(minDistanceBetweenPolygonsM(selectedFairway.points, h.points)) <= 15
+        : false;
+      return nearGreen || nearFairway;
+    });
+  }, [selectedGreen, selectedFairway, courseHazards]);
 
   // Carry distance to each hazard's near edge from wherever the golfer is
   // standing right now — same live-position math as the green itself.
-  const hazardDistances = useMemo(() => {
+  // Pre-formatted for HoleView's on-image pills. Capped to the 5 closest —
+  // even with the tighter proximity filter above, a hazard-dense hole
+  // shouldn't turn into a wall of overlapping pills.
+  const hazardsForView = useMemo(() => {
     if (!here || !nearbyHazards.length) return [];
     return nearbyHazards
-      .map((h) => ({ kind: h.kind, yards: closestEdgeYards(here, h.points) }))
-      .sort((a, b) => a.yards - b.yards);
-  }, [here, nearbyHazards]);
+      .map((h) => ({ ...h, sortYards: closestEdgeYards(here, h.points) }))
+      .sort((a, b) => a.sortYards - b.sortYards)
+      .slice(0, 5)
+      .map((h) => ({ kind: h.kind, points: h.points, label: String(convertDistance(h.sortYards, dUnit)) }));
+  }, [here, nearbyHazards, dUnit]);
 
   const usingAuto = !!autoDistances && !manualOverride;
   const manuallyMarked = green.front && green.middle && green.back;
@@ -202,6 +239,8 @@ export default function Round({ state, update, goGames }) {
   function advanceHole() {
     if (usingAuto && selectedGreen) {
       setUsedGreenIds((s) => new Set([...s, selectedGreen.id]));
+      if (selectedFairway) setUsedFairwayIds((s) => new Set([...s, selectedFairway.id]));
+      if (selectedTee) setUsedTeeIds((s) => new Set([...s, selectedTee.id]));
     }
     resetGreen();
     setManualOverride(false);
@@ -266,9 +305,11 @@ export default function Round({ state, update, goGames }) {
 
         {greenReady ? (
           <>
-            <GreenView
-              points={usingAuto ? selectedGreen.points : null}
-              hazards={usingAuto ? nearbyHazards : []}
+            <HoleView
+              greenPoints={usingAuto ? selectedGreen.points : null}
+              fairwayPoints={usingAuto ? selectedFairway?.points : null}
+              teePoints={usingAuto ? selectedTee?.points : null}
+              hazards={usingAuto ? hazardsForView : []}
               here={here}
               isReal={usingAuto}
               front={convertDistance(distances.front, dUnit)}
@@ -296,15 +337,6 @@ export default function Round({ state, update, goGames }) {
                 <span className="small" style={{ opacity: 0.75 }}>Calm conditions</span>
               )}
             </div>
-            {usingAuto && hazardDistances.length > 0 && (
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-                {hazardDistances.map((h, i) => (
-                  <span key={i} className="chip sky" style={{ height: "auto", padding: "5px 10px" }}>
-                    {h.kind === "bunker" ? "🏖" : "💧"} {convertDistance(h.yards, dUnit)} {distanceLabel(dUnit)}
-                  </span>
-                ))}
-              </div>
-            )}
           </>
         ) : (
           <>

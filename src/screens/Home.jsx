@@ -296,6 +296,8 @@ export default function Home({ state, hero, update, onStartRound }) {
       courseLng: course?.lng ?? null,
       courseHoles: course?.holes ?? null,
       courseGreens: course?.greens ?? [],
+      courseFairways: course?.fairways ?? [],
+      courseTeeBoxes: course?.teeBoxes ?? [],
       courseHazards: course?.hazards ?? [],
       handicapIndexes,
       teeRatingSlope: selectedTee ? { rating: selectedTee.rating, slope: selectedTee.slope } : null,
