@@ -1,18 +1,21 @@
 // Renders the hole as it plays from wherever the golfer is standing right
 // now — fairway, tee (if not already played past), every hazard, and the
-// green — with front/middle/back and hazard-carry yardages marked directly
-// on the shapes, the way a real golf GPS rangefinder does. Auto-zooms:
-// projection is centred on the golfer's live position, rotated so the
-// direction of play points up, so the view naturally tightens to "what's
-// left to play" as the golfer walks — anything behind the golfer falls
-// outside the frame and is clipped by the SVG viewport, no explicit
+// green — with a pin flag marking the aim point and a dashed line down to
+// the golfer, the way a real golf GPS rangefinder's top-down graphic looks.
+// Auto-zooms: projection is centred on the golfer's live position, rotated
+// so the direction of play points up, so the view naturally tightens to
+// "what's left to play" as the golfer walks — anything behind the golfer
+// falls outside the frame and is clipped by the SVG viewport, no explicit
 // polygon-clipping math needed.
+//
+// Distance numbers live in the Game screen's own readout pills, not on this
+// graphic — this stays a clean illustration, real shapes only, no labels.
 //
 // Falls back to a plain dashed oval (no fairway/hazards) when this course
 // isn't mapped on OSM — never fabricates a shape as if it were real.
 
-const VIEW_W = 260;
-const VIEW_H = 360;
+const VIEW_W = 220;
+const VIEW_H = 260;
 const MPER_DEG_LAT = 110574;
 // Golfer sits near the bottom of the frame, green fills the rest above —
 // matches how rangefinder apps frame "you are here, green up top."
@@ -33,32 +36,6 @@ function buildProjector(here, greenCentroid) {
     });
 }
 
-function nearestVertex(local) {
-  let best = local[0];
-  let bestD = Infinity;
-  for (const p of local) {
-    const d = Math.hypot(p.x, p.y);
-    if (d < bestD) {
-      bestD = d;
-      best = p;
-    }
-  }
-  return best;
-}
-
-// Front/back-of-green anchors pick by y (distance along the direction of
-// play) rather than raw straight-line distance from the golfer — a wide or
-// angled green can have its Euclidean-farthest vertex sitting off to one
-// side with a smaller y than the golfer's own position, which would place
-// the "back" label behind the golfer, off the frame the view was scaled to.
-function frontVertex(local) {
-  return local.reduce((best, p) => (p.y < best.y ? p : best), local[0]);
-}
-
-function backVertex(local) {
-  return local.reduce((best, p) => (p.y > best.y ? p : best), local[0]);
-}
-
 function centroid(local) {
   return {
     x: local.reduce((s, p) => s + p.x, 0) / local.length,
@@ -66,20 +43,10 @@ function centroid(local) {
   };
 }
 
-const HAZARD_FILL = { bunker: "#e3cd94", water: "var(--sky-400)" };
-const HAZARD_STROKE = { bunker: "#a8874a", water: "var(--sky-700)" };
+const HAZARD_FILL = { bunker: "#e3cd94", water: "#6bb7d4" };
+const HAZARD_STROKE = { bunker: "#a8874a", water: "#3a7d95" };
 
-export default function HoleView({
-  greenPoints,
-  fairwayPoints,
-  teePoints,
-  hazards,
-  here,
-  isReal,
-  front,
-  middle,
-  back,
-}) {
+export default function HoleView({ greenPoints, fairwayPoints, teePoints, hazards, here, isReal }) {
   const hasHole = isReal && greenPoints && greenPoints.length >= 3 && here;
   let scene = null;
 
@@ -97,7 +64,7 @@ export default function HoleView({
     // the frame's scale is fit to what's ahead) drawing a behind-the-golfer
     // hazard at that same scale would just place it off-canvas anyway.
     const aheadHazards = (hazards ?? [])
-      .map((h) => ({ kind: h.kind, local: project(h.points), label: h.label }))
+      .map((h) => ({ kind: h.kind, local: project(h.points) }))
       .filter((h) => h.local.some((p) => p.y >= -10));
 
     const framePoints = [{ x: 0, y: 0 }, ...localGreen, ...aheadHazards.flatMap((h) => h.local)];
@@ -113,42 +80,21 @@ export default function HoleView({
     // how far above it the green sits.
     const toSvg = (p) => `${(cx + p.x * scale).toFixed(1)},${(GOLFER_ANCHOR_Y - p.y * scale).toFixed(1)}`;
     const pathFrom = (local) => "M " + local.map(toSvg).join(" L ") + " Z";
-
-    // Pill anchors get clamped inside the frame — a wide or angled green's
-    // extreme vertex can land just past the golfer's own axis (still a
-    // valid point on a real polygon), which without clamping would place a
-    // distance label off-canvas. The shape itself is drawn with the
-    // unclamped toSvg above; only the small text labels need this.
-    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-    const anchorSvg = (p) => {
-      const x = clamp(cx + p.x * scale, 18, VIEW_W - 18);
-      const y = clamp(GOLFER_ANCHOR_Y - p.y * scale, 13, VIEW_H - 13);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    };
+    const pin = centroid(localGreen);
 
     scene = {
       greenPath: pathFrom(localGreen),
       fairwayPath: localFairway ? pathFrom(localFairway) : null,
       teePath: localTee ? pathFrom(localTee) : null,
-      hazardShapes: aheadHazards.map((h) => ({
-        kind: h.kind,
-        d: pathFrom(h.local),
-        label: h.label,
-        // Anchor on the nearest point that's actually ahead — the polygon
-        // can still dip behind the golfer at the edges even though the
-        // hazard as a whole qualifies as "ahead".
-        anchor: anchorSvg(nearestVertex(h.local.filter((p) => p.y >= -10))),
-      })),
+      hazardShapes: aheadHazards.map((h) => ({ kind: h.kind, d: pathFrom(h.local) })),
       golferAnchor: toSvg({ x: 0, y: 0 }),
-      frontAnchor: anchorSvg(frontVertex(localGreen)),
-      backAnchor: anchorSvg(backVertex(localGreen)),
-      middleAnchor: anchorSvg(centroid(localGreen)),
+      pinAnchor: toSvg(pin),
     };
   }
 
   return (
     <div className="hole-view">
-      <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} width="100%" height="280" preserveAspectRatio="xMidYMid meet">
+      <svg viewBox={`0 0 ${VIEW_W} ${VIEW_H}`} width="100%" height="220" preserveAspectRatio="xMidYMid meet">
         {scene ? (
           <>
             {scene.fairwayPath && <path d={scene.fairwayPath} fill="#3d9960" opacity="0.9" />}
@@ -156,32 +102,23 @@ export default function HoleView({
               <path key={i} d={h.d} fill={HAZARD_FILL[h.kind]} stroke={HAZARD_STROKE[h.kind]} strokeWidth="1.5" />
             ))}
             {scene.teePath && <path d={scene.teePath} fill="#8a8266" />}
-            <path d={scene.greenPath} fill="var(--pine-400)" stroke="var(--pine-100)" strokeWidth="2" />
+            <path d={scene.greenPath} fill="#1f6349" stroke="#c9a94e" strokeWidth="2" />
 
-            {scene.hazardShapes.map((h, i) => (
-              <g key={`lbl-${i}`} transform={`translate(${h.anchor})`}>
-                <circle r="13" fill="rgba(4,8,6,0.72)" stroke={HAZARD_STROKE[h.kind]} strokeWidth="1" />
-                <text textAnchor="middle" dy="3.5" fontSize="9" fontWeight="700" fill="var(--ink)">
-                  {h.label}
-                </text>
-              </g>
-            ))}
-
-            <g transform={`translate(${scene.backAnchor})`}>
-              <rect x="-16" y="-9" width="32" height="18" rx="9" fill="rgba(4,8,6,0.72)" />
-              <text textAnchor="middle" dy="3.5" fontSize="10" fontWeight="700" fill="var(--ink)">{back}</text>
+            <line
+              x1={scene.pinAnchor.split(",")[0]}
+              y1={scene.pinAnchor.split(",")[1]}
+              x2={scene.golferAnchor.split(",")[0]}
+              y2={scene.golferAnchor.split(",")[1]}
+              stroke="rgba(245,241,230,0.5)"
+              strokeWidth="1.5"
+              strokeDasharray="4 4"
+            />
+            <g transform={`translate(${scene.pinAnchor})`}>
+              <line x1="0" y1="0" x2="0" y2="-18" stroke="var(--ink)" strokeWidth="1.5" />
+              <path d="M 0 -18 L 10 -14 L 0 -10 Z" fill="var(--gold)" />
             </g>
-            <g transform={`translate(${scene.middleAnchor})`}>
-              <rect x="-16" y="-9" width="32" height="18" rx="9" fill="var(--gold-500)" />
-              <text textAnchor="middle" dy="3.5" fontSize="10" fontWeight="700" fill="var(--gold-900)">{middle}</text>
-            </g>
-            <g transform={`translate(${scene.frontAnchor})`}>
-              <rect x="-16" y="-9" width="32" height="18" rx="9" fill="rgba(4,8,6,0.72)" />
-              <text textAnchor="middle" dy="3.5" fontSize="10" fontWeight="700" fill="var(--ink)">{front}</text>
-            </g>
-
             <g transform={`translate(${scene.golferAnchor})`}>
-              <circle r="7" fill="var(--gold-500)" stroke="var(--paper)" strokeWidth="2" />
+              <circle r="6" fill="var(--gold)" stroke="var(--paper)" strokeWidth="2" />
             </g>
           </>
         ) : (
@@ -190,33 +127,13 @@ export default function HoleView({
             cy={VIEW_H / 2}
             rx={VIEW_W * 0.3}
             ry={VIEW_H * 0.28}
-            fill="var(--pine-600)"
-            stroke="var(--pine-200)"
+            fill="#1f6349"
+            stroke="#c9a94e"
             strokeWidth="2"
             strokeDasharray="6 5"
           />
         )}
       </svg>
-
-      {!scene && (
-        <>
-          <div className="hole-view-label back">
-            <span className="lbl">Back</span>
-            <span className="val num">{back ?? "—"}</span>
-          </div>
-          <div className="hole-view-label middle">
-            <span className="lbl">Middle</span>
-            <span className="val num">{middle ?? "—"}</span>
-          </div>
-          <div className="hole-view-label front">
-            <span className="lbl">Front</span>
-            <span className="val num">{front ?? "—"}</span>
-          </div>
-          <p className="muted small" style={{ textAlign: "center", marginTop: 6 }}>
-            Approximate shape — this course's green isn't mapped yet.
-          </p>
-        </>
-      )}
     </div>
   );
 }

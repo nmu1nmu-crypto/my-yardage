@@ -1,28 +1,58 @@
 :root {
-  --pine-900: #04342c;
-  --pine-800: #085041;
-  --pine-600: #0f6e56;
-  --pine-400: #16d38f;
-  --pine-200: #5dcaa5;
-  --pine-100: #9fe1cb;
-  --pine-50: #e1f5ee;
-  --gold-600: #ba7517;
-  --gold-500: #ff9f1c;
-  --gold-200: #fac775;
-  --gold-50: #faeeda;
-  --gold-900: #412402;
-  --clay-500: #ff5d3d;
-  --sky-900: #063a4a;
-  --sky-700: #0e5a6e;
-  --sky-400: #3ee0f2;
-  --sky-100: #cdf7fb;
-  --ink: #f2f6f2;
-  --paper: #0c1512;
-  --card: #182420;
-  --line: rgba(242, 246, 242, 0.12);
-  --radius: 14px;
-  --font-ui: "Archivo", system-ui, sans-serif;
+  /* Dark forest & gold — private-club premium, not a bright sports HUD.
+   * See DESIGN.md for the full token rationale and contrast checks. */
+  --paper: #0f2419;
+  --card-grad-1: #1b3b26;
+  --card-grad-2: #12281b;
+  --card-border: rgba(201, 169, 78, 0.28);
+  --gold: #c9a94e;
+  --gold-grad-1: #ddbb63;
+  --gold-grad-2: #b8933b;
+  --gold-ink: #1b3b26;
+  --ink: #f5f1e6;
+  --muted-35: rgba(245, 241, 230, 0.35);
+  --muted-55: rgba(245, 241, 230, 0.55);
+  --coral: #d97757;
+  --coral-delete: #e05a4e;
+  --emerald-1: #1f6349;
+  --emerald-2: #143d2c;
+  --emerald-header: #123822;
+  --emerald-row: #17472f;
+  --lime: #c6f135;
+
+  /* Back-compat aliases so any not-yet-touched selector still resolves to
+   * a palette-correct color rather than the old teal/orange theme. */
+  --pine-900: #081c14;
+  --pine-800: var(--card-grad-1);
+  --pine-600: #1f6349;
+  --pine-400: var(--gold);
+  --pine-200: var(--muted-55);
+  --pine-100: var(--muted-35);
+  --pine-50: rgba(245, 241, 230, 0.08);
+  --gold-600: var(--gold-grad-2);
+  --gold-500: var(--gold);
+  --gold-200: var(--gold-grad-1);
+  --gold-50: rgba(201, 169, 78, 0.14);
+  --gold-900: var(--gold-ink);
+  --clay-500: var(--coral-delete);
+  --sky-900: var(--emerald-2);
+  --sky-700: var(--emerald-1);
+  --sky-400: var(--gold);
+  --sky-100: var(--ink);
+
+  --card: var(--card-grad-1);
+  --line: var(--card-border);
+  --radius: 18px;
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-wordmark: "Space Grotesk", var(--font-ui);
   --font-num: "Spline Sans Mono", ui-monospace, monospace;
+
+  /* z-index scale — dropdown < sticky < modal-backdrop < modal < toast */
+  --z-dropdown: 10;
+  --z-sticky: 20;
+  --z-modal-backdrop: 40;
+  --z-modal: 50;
+  --z-toast: 60;
 }
 
 * { box-sizing: border-box; }
@@ -59,123 +89,142 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--paper);
 }
 
-/* The tabbar is a normal flex item pinned by the app shell, not its own
- * position:fixed — it can only move if #root itself moves, and #root is
- * pinned to the viewport above, so it never does. */
-/* Top padding always clears the iPhone status bar (time/wifi/battery) on
- * every screen, not just Home — env(safe-area-inset-top) only resolves to
- * a real value with viewport-fit=cover (set in index.html). */
 .screen { flex: 1; min-height: 0; padding: calc(16px + env(safe-area-inset-top)) 16px 16px; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; }
 
-/* Numbers are the product — they get their own face */
 .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
 
+/* ---- hero (Home) ------------------------------------------------------ */
+
 .hero {
-  background-color: var(--pine-800);
+  background-color: var(--card-grad-2);
   background-size: cover;
   background-position: center;
-  color: var(--pine-50);
-  /* Cancels .screen's full top padding (including the safe-area part above)
-   * so the photo runs full-bleed under the status bar, then re-adds exactly
-   * one safe-area-inset-top via its own padding below — without this the
-   * safe area would effectively be applied twice. */
+  color: var(--ink);
   margin: calc(-16px - env(safe-area-inset-top)) -16px 0;
   padding: calc(20px + env(safe-area-inset-top)) 16px 56px;
 }
-.hero .eyebrow { color: var(--pine-100); font-size: 13px; margin: 0; }
-.hero h1 { font-size: 22px; font-weight: 600; margin: 4px 0 0; }
+.hero .eyebrow { color: var(--muted-55); font-size: 13px; margin: 0; }
+.hero h1 { font-size: 22px; font-weight: 700; margin: 4px 0 0; }
 
 .hero--photo {
-  min-height: 230px;
+  min-height: 280px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  position: relative;
 }
+/* Top/bottom gradient scrims so the status bar and the overlapping "My
+ * card" panel both stay legible over any photo. */
+.hero--photo::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(4, 12, 8, 0.45) 0%, rgba(4, 12, 8, 0) 22%, rgba(15, 36, 25, 0) 55%, var(--paper) 100%);
+  pointer-events: none;
+}
+.hero--photo > * { position: relative; z-index: 1; }
+
 .avatar-btn {
-  width: 46px; height: 46px; border-radius: 50%; flex-shrink: 0;
-  border: 2px solid rgba(255, 255, 255, 0.55);
-  background: rgba(255, 255, 255, 0.14);
-  color: var(--pine-50); font-size: 20px;
+  width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0;
+  border: none;
+  background: rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(6px);
+  color: var(--ink); font-size: 18px;
   display: grid; place-items: center; padding: 0; cursor: pointer;
   overflow: hidden;
 }
 .avatar-btn img { width: 100%; height: 100%; object-fit: cover; }
-.hero-greeting { font-size: 16px; font-weight: 600; margin: 6px 0 0; }
+.hero-greeting { font-size: 13px; color: rgba(245, 241, 230, 0.85); margin: 0; }
 .hero-course { margin-top: 18px; }
 .hero-course-name {
-  font-size: 19px; font-weight: 700; margin: 0;
+  font-size: 22px; font-weight: 700; margin: 0; color: #fff;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
 }
-.hero-course-loc { font-size: 12px; color: var(--pine-100); margin: 2px 0 0; }
+.hero-course-loc { font-size: 12px; color: var(--muted-55); margin: 2px 0 0; }
 .hero-change-btn {
   margin-top: 10px; border: none; cursor: pointer;
-  background: rgba(255, 255, 255, 0.16); color: var(--pine-50);
+  background: rgba(255, 255, 255, 0.16); color: var(--ink);
   font: 500 12px var(--font-ui); padding: 6px 12px; border-radius: 999px;
 }
 
 .brandmark {
   display: flex; align-items: center; gap: 8px;
-  font-weight: 600; letter-spacing: 0.01em; margin-bottom: 18px;
+  font-weight: 700; letter-spacing: 0.01em; margin-bottom: 18px;
 }
 .brandmark .dot {
   width: 28px; height: 28px; border-radius: 8px;
-  background: var(--pine-200); color: var(--pine-900);
+  background: var(--gold); color: var(--gold-ink);
   display: grid; place-items: center; font-size: 15px;
 }
+
+/* ---- buttons & cards ---------------------------------------------------- */
 
 .btn {
   display: block; width: 100%; border: none; cursor: pointer;
   height: 52px; border-radius: var(--radius);
-  font: 600 16px var(--font-ui);
-  background: var(--gold-500); color: var(--gold-900);
+  font: 700 16px var(--font-ui);
+  background: linear-gradient(160deg, var(--gold-grad-1), var(--gold-grad-2));
+  color: var(--gold-ink);
 }
-.btn.pine { background: var(--pine-400); color: var(--pine-900); }
-.btn.raise { margin-top: -26px; box-shadow: 0 1px 0 var(--line); }
+.btn.pine { background: var(--gold); color: var(--gold-ink); }
+.btn.raise { margin-top: -28px; position: relative; z-index: 2; box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35); }
 .btn.ghost {
-  background: transparent; color: var(--pine-200);
-  border: 1px dashed var(--pine-400); font-weight: 500; height: 46px;
+  background: transparent; color: var(--ink);
+  border: 1px solid var(--card-border); font-weight: 600; height: 46px;
 }
 .btn:active { transform: scale(0.985); }
+.btn:disabled { opacity: 0.6; cursor: default; }
 
 .card {
-  background: var(--card); border: 1px solid var(--line);
+  background: linear-gradient(160deg, var(--card-grad-1), var(--card-grad-2));
+  border: 1px solid var(--card-border);
   border-radius: var(--radius); padding: 14px; margin-top: 12px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
 }
-.card.pine { background: var(--pine-800); border: none; color: var(--pine-50); }
-.card.gold { background: var(--gold-50); border: none; color: var(--gold-600); }
-.card.sky { background: linear-gradient(160deg, var(--sky-700), var(--sky-900)); border: none; color: var(--sky-100); }
+.card.pine { background: linear-gradient(160deg, var(--card-grad-1), var(--card-grad-2)); border: 1px solid var(--card-border); color: var(--ink); }
+.card.gold { background: rgba(201, 169, 78, 0.1); border: 1px solid var(--card-border); color: var(--gold); }
+.card.sky { background: linear-gradient(160deg, var(--emerald-1), var(--emerald-2)); border: none; color: var(--ink); }
+
+/* Gold-bordered, gold-glow panel — Recommended Club / Last Shot / any
+ * "this number matters most right now" panel. */
+.card.spotlight {
+  border: 2px solid var(--gold);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28), 0 8px 20px rgba(201, 169, 78, 0.15);
+}
 
 .metric-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
-.metric { background: var(--pine-50); border-radius: 10px; padding: 10px; }
-.metric.gold { background: var(--gold-50); }
-.metric .label { font-size: 11px; color: var(--pine-600); margin: 0; }
-.metric.gold .label { color: var(--gold-600); }
-.metric .value { font-size: 20px; font-weight: 600; margin: 2px 0 0; color: var(--pine-900); }
-.metric.gold .value { color: var(--gold-900); }
+.metric { background: rgba(245, 241, 230, 0.06); border-radius: 12px; padding: 10px; }
+.metric.gold { background: rgba(201, 169, 78, 0.12); }
+.metric .label { font-size: 11px; color: var(--muted-55); margin: 0; text-transform: uppercase; letter-spacing: 0.02em; }
+.metric.gold .label { color: var(--gold); }
+.metric .value { font-size: 20px; font-weight: 700; margin: 2px 0 0; color: var(--ink); }
+.metric.gold .value { color: var(--gold); }
 
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip {
-  padding: 7px 12px; font: 500 13px var(--font-ui);
-  border-radius: 999px; border: 1px solid var(--line);
+  padding: 7px 12px; font: 600 13px var(--font-ui);
+  border-radius: 999px; border: 1px solid var(--card-border);
   background: transparent; color: var(--ink); cursor: pointer;
 }
-.chip.on { background: var(--pine-400); border-color: var(--pine-600); color: var(--pine-900); }
+.chip.on { background: var(--gold); border-color: var(--gold); color: var(--gold-ink); }
+.chip.sky { background: rgba(255, 255, 255, 0.12); color: var(--ink); border: none; }
 
 .pill {
-  display: inline-block; font-size: 12px; font-weight: 600;
+  display: inline-block; font-size: 12px; font-weight: 700;
   padding: 3px 10px; border-radius: 999px;
-  background: var(--pine-50); color: var(--pine-800);
+  background: rgba(245, 241, 230, 0.1); color: var(--ink);
 }
-.pill.gold { background: var(--gold-50); color: var(--gold-600); }
-.pill.sky { background: rgba(255, 255, 255, 0.16); color: var(--sky-100); }
+.pill.gold { background: rgba(201, 169, 78, 0.16); color: var(--gold); }
+.pill.sky { background: rgba(255, 255, 255, 0.16); color: var(--ink); }
 
 .row { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-.muted { color: rgba(242, 246, 242, 0.55); font-size: 13px; }
+.muted { color: var(--muted-55); font-size: 13px; }
 .small { font-size: 12px; }
 
-.list-row { padding: 12px 0; border-top: 1px solid var(--line); }
+.list-row { padding: 12px 0; border-top: 1px solid var(--card-border); }
 .list-row:first-of-type { border-top: none; }
 
 .course-row { padding: 10px 0; align-items: center; }
@@ -185,30 +234,29 @@ body {
 }
 .star-btn {
   background: none; border: none; cursor: pointer;
-  color: var(--gold-500); font-size: 18px; line-height: 1; padding: 4px;
+  color: var(--gold); font-size: 18px; line-height: 1; padding: 4px;
   flex-shrink: 0;
 }
 
 .tabbar {
   flex-shrink: 0;
   display: grid; grid-template-columns: repeat(5, 1fr);
-  background: var(--card); border-top: 1px solid var(--line);
+  background: var(--card-grad-2); border-top: 1px solid var(--card-border);
   padding: 8px 0 max(10px, env(safe-area-inset-bottom));
+  position: relative; z-index: var(--z-sticky);
 }
 .tabbar button {
   border: none; background: none; cursor: pointer;
-  font: 500 11px var(--font-ui); color: rgba(242, 246, 242, 0.45);
+  font: 600 11px var(--font-ui); color: var(--muted-35);
   display: grid; gap: 2px; justify-items: center; padding: 4px 0;
 }
-.tabbar button.on { color: var(--pine-400); }
+.tabbar button.on { color: var(--gold); }
 .tabbar .glyph { font-size: 23px; line-height: 1; }
 
 .clubbar { display: flex; align-items: flex-end; gap: 5px; height: 74px; margin-top: 8px; }
 .clubbar .col { flex: 1; text-align: center; }
-.clubbar .bar { border-radius: 4px 4px 0 0; background: var(--pine-200); }
-.clubbar .lbl { font-size: 11px; color: rgba(242, 246, 242, 0.55); margin-top: 3px; }
-
-.chip.sky { background: rgba(255, 255, 255, 0.14); color: var(--sky-100); border: none; }
+.clubbar .bar { border-radius: 4px 4px 0 0; background: var(--gold); }
+.clubbar .lbl { font-size: 11px; color: var(--muted-55); margin-top: 3px; }
 
 .hole-view { position: relative; margin-top: 4px; }
 .hole-view-label {
@@ -216,112 +264,278 @@ body {
   text-align: center; display: flex; flex-direction: column; align-items: center;
 }
 .hole-view-label .lbl { font-size: 11px; opacity: 0.75; }
-.hole-view-label .val { font-size: 22px; font-weight: 600; margin-top: 2px; }
+.hole-view-label .val { font-size: 22px; font-weight: 700; margin-top: 2px; }
 .hole-view-label.back { top: 4px; }
 .hole-view-label.middle { top: 50%; transform: translate(-50%, -50%); }
-.hole-view-label.middle .val { color: var(--sky-400); }
+.hole-view-label.middle .val { color: var(--gold); }
 .hole-view-label.front { bottom: 30px; }
 
 input[type="number"], input[type="text"], input[type="email"], select {
   width: 100%; height: 44px; padding: 0 12px;
-  border: 1px solid var(--line); border-radius: 10px;
-  font: 400 15px var(--font-ui); background: var(--card); color: var(--ink);
+  border: 1px solid var(--card-border); border-radius: 12px;
+  font: 400 15px var(--font-ui); background: rgba(245, 241, 230, 0.06); color: var(--ink);
 }
+input::placeholder { color: var(--muted-35); }
 select { appearance: none; -webkit-appearance: none; }
 
-/* Scorecard — expandable per-player cards, GolfGameBook-style: green
-   band headers, black column bar, white/grey cards, filled score circles. */
-.sg-header-card {
-  background: #fdfaf2; border-radius: var(--radius); padding: 12px 14px;
-  color: #1a1a1a; margin-top: 8px;
-}
-.sg-header-card .muted { color: #857c60; }
-.sg-brandmark {
-  font-size: 11px; font-weight: 700; color: #1d9e75; white-space: nowrap;
-  display: flex; align-items: center; gap: 5px;
-}
-.sg-brandmark img { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0; }
+/* ---- logo mark ---------------------------------------------------------- */
 
-.sg-banner {
-  background: #1a9e5c; color: #fff; text-align: center; font-weight: 700;
-  font-size: 13px; padding: 8px; border-radius: 10px; margin-top: 8px;
+.logo-mark { flex-shrink: 0; display: block; }
+
+/* ---- My card (Home) — gauge, avatar, stat tiles ------------------------ */
+
+.mycard {
+  margin-top: -28px; position: relative; z-index: 2;
+}
+.mycard-avatar {
+  width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(160deg, var(--gold-grad-1), var(--gold-grad-2));
+  color: var(--gold-ink); font-weight: 700; font-size: 20px;
+  display: grid; place-items: center; overflow: hidden;
+}
+.mycard-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.mycard-name { font-size: 16px; font-weight: 700; margin: 0; }
+.mycard-sub { font-size: 12px; color: var(--muted-55); margin: 2px 0 0; }
+
+.gauge-wrap { position: relative; width: 58px; height: 58px; flex-shrink: 0; }
+.gauge-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.gauge-value {
+  position: absolute; inset: 0; display: grid; place-items: center;
+  font-family: var(--font-num); font-size: 13px; font-weight: 700; color: var(--gold);
 }
 
-.sg-colhead {
-  display: flex; align-items: center; gap: 8px;
-  background: #1a1a1a; color: #fff; font-size: 10px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.02em;
-  padding: 8px 12px; border-radius: 10px; margin-top: 8px;
+.stat-tile-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
+.stat-tile { background: rgba(245, 241, 230, 0.06); border-radius: 12px; padding: 10px 12px; }
+.stat-tile .label { font-size: 10px; color: var(--muted-55); text-transform: uppercase; letter-spacing: 0.04em; margin: 0; }
+.stat-tile .value { font-family: var(--font-num); font-size: 20px; font-weight: 700; margin: 3px 0 0; }
+
+/* ---- Players section (Home) -------------------------------------------- */
+
+.player-row-card { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
+.player-avatar {
+  width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+  background: rgba(201, 169, 78, 0.16); color: var(--gold);
+  font-weight: 700; font-size: 13px; display: grid; place-items: center;
+}
+.player-chevron {
+  background: none; border: none; color: var(--muted-55); cursor: pointer;
+  font-size: 16px; padding: 6px; flex-shrink: 0;
 }
 
-.sg-card {
-  background: #efece3; border-radius: 14px; margin-top: 8px; overflow: hidden;
+/* ---- segmented control -------------------------------------------------- */
+
+.segmented {
+  display: flex; background: rgba(245, 241, 230, 0.06);
+  border-radius: 999px; padding: 3px; gap: 3px;
 }
-.sg-card.open { background: #ffffff; box-shadow: 0 2px 10px rgba(20, 20, 10, 0.15); }
-.sg-summary {
-  width: 100%; display: flex; align-items: center; gap: 10px;
-  padding: 12px; background: none; border: none; cursor: pointer; text-align: left;
+.segmented button {
+  flex: 1; border: none; background: none; cursor: pointer;
+  height: 36px; border-radius: 999px; font: 700 13px var(--font-ui); color: var(--ink);
 }
-.sg-rank {
+.segmented button.on { background: linear-gradient(160deg, var(--gold-grad-1), var(--gold-grad-2)); color: var(--gold-ink); }
+
+/* ---- stepper (handicap / bag yardage) ----------------------------------- */
+
+.stepper { display: flex; align-items: center; gap: 10px; }
+.stepper button {
+  width: 32px; height: 32px; border-radius: 50%; border: 1px solid var(--card-border);
+  background: rgba(245, 241, 230, 0.06); color: var(--ink); font-size: 16px; font-weight: 700;
+  cursor: pointer; display: grid; place-items: center; flex-shrink: 0;
+}
+.stepper .stepper-value { font-family: var(--font-num); font-size: 16px; font-weight: 700; min-width: 46px; text-align: center; }
+
+/* ---- checkbox row -------------------------------------------------------- */
+
+.checkbox-row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.checkbox-box {
+  width: 20px; height: 20px; border-radius: 6px; border: 1px solid var(--card-border);
+  flex-shrink: 0; display: grid; place-items: center; background: rgba(245, 241, 230, 0.06);
+}
+.checkbox-box.checked { background: var(--gold); border-color: var(--gold); color: var(--gold-ink); }
+
+/* ---- Profile screen ------------------------------------------------------ */
+
+.profile-screen {
+  position: fixed; inset: 0; z-index: var(--z-modal);
+  background: var(--paper);
+  display: flex; flex-direction: column;
+  max-width: 430px; margin: 0 auto;
+}
+.profile-topbar {
+  display: flex; align-items: center;
+  padding: calc(14px + env(safe-area-inset-top)) 16px 12px;
+  border-bottom: 1px solid var(--card-border);
+  flex-shrink: 0;
+}
+.profile-topbar-btn {
+  background: none; border: none; color: var(--ink); cursor: pointer;
+  font-size: 22px; padding: 4px; flex-shrink: 0; line-height: 1; width: 40px;
+}
+.profile-topbar-title { flex: 1; text-align: center; font-size: 17px; font-weight: 700; }
+.profile-save { background: none; border: none; color: var(--gold); font: 700 15px var(--font-ui); cursor: pointer; width: 40px; text-align: right; }
+.profile-body { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 16px max(16px, env(safe-area-inset-bottom)); }
+.field-label { font-size: 11px; color: var(--muted-55); text-transform: uppercase; letter-spacing: 0.04em; margin: 18px 0 6px; }
+.field-label:first-child { margin-top: 0; }
+
+/* ---- Game screen top bar ------------------------------------------------- */
+
+.game-topbar { display: flex; align-items: center; gap: 12px; margin: 4px 0 12px; }
+.game-topbar-hole { flex: 1; text-align: center; }
+.game-topbar-hole strong { font-size: 17px; display: block; }
+.game-topbar-hole span { font-size: 12px; color: var(--muted-55); }
+.hole-nav-btn {
+  width: 32px; height: 32px; border-radius: 50%; border: none;
+  background: rgba(245, 241, 230, 0.08); color: var(--ink); font-size: 15px;
+  cursor: pointer; display: grid; place-items: center; flex-shrink: 0;
+}
+
+/* ---- Distance-to-pin readouts ------------------------------------------- */
+
+.distance-readouts { display: flex; flex-direction: column; gap: 8px; }
+.distance-readout {
+  background: rgba(245, 241, 230, 0.06); border-radius: 12px; padding: 8px 12px; text-align: right;
+}
+.distance-readout .label { font-size: 10px; color: var(--muted-55); text-transform: uppercase; letter-spacing: 0.04em; margin: 0; }
+.distance-readout .value { font-family: var(--font-num); font-size: 22px; font-weight: 700; margin: 0; }
+.distance-readout.mid {
+  background: linear-gradient(160deg, var(--gold-grad-1), var(--gold-grad-2));
+}
+.distance-readout.mid .label { color: rgba(27, 59, 38, 0.7); }
+.distance-readout.mid .value { color: var(--gold-ink); font-size: 26px; }
+
+/* ---- Recommended Club / Last Shot dual panel ---------------------------- */
+
+.dual-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+.dual-panel .panel-label { font-size: 10px; color: var(--gold); text-transform: uppercase; letter-spacing: 0.04em; margin: 0; }
+.dual-panel .panel-value { font-size: 20px; font-weight: 700; margin: 4px 0 0; }
+.dual-panel .panel-sub { font-size: 12px; color: var(--muted-55); margin: 2px 0 0; }
+
+/* ---- Scorecard table (Game + Scorecard screens) ------------------------- */
+
+.scoregrid-panel {
+  background: linear-gradient(160deg, var(--emerald-1), var(--emerald-2));
+  border-radius: var(--radius); padding: 12px; margin-top: 12px;
+}
+.scoregrid-head {
+  display: grid; gap: 2px; align-items: center;
+  background: var(--emerald-header); border-radius: 10px; padding: 6px 8px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em;
+  color: var(--muted-55);
+}
+.scoregrid-head .current { color: var(--gold); }
+.scoregrid-row {
+  display: grid; gap: 2px; align-items: center; padding: 5px 8px;
+}
+.scoregrid-row.player-row { background: var(--emerald-row); border-radius: 10px; margin-top: 4px; }
+.scoregrid-player { display: flex; align-items: center; gap: 6px; overflow: hidden; }
+.scoregrid-avatar {
   width: 22px; height: 22px; border-radius: 50%; flex-shrink: 0;
-  background: #dcd6c2; color: #2b2620; font-weight: 700; font-size: 12px;
+  background: var(--lime); color: #123822; font-weight: 700; font-size: 10px;
   display: grid; place-items: center;
 }
-.sg-name { font-weight: 700; color: #1a1a1a; font-size: 14px; }
-.sg-score { font-weight: 700; font-size: 17px; color: #1a1a1a; min-width: 30px; text-align: right; }
-.sg-topar { font-weight: 700; font-size: 15px; color: #1a1a1a; min-width: 36px; text-align: right; }
-.sg-topar.good { color: #e0433d; }
-.sg-thru { color: #8a8266; font-size: 13px; min-width: 26px; text-align: right; }
+.scoregrid-name { font-size: 11px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scoregrid-cell { text-align: center; }
+.scoregrid-total { text-align: center; font-family: var(--font-num); font-weight: 700; color: var(--ink); }
 
-.sg-grid { padding: 0 10px 12px; }
-.sg-holebar {
-  display: grid; grid-template-columns: 15% repeat(9, 1fr) 11%;
-  background: #1a9e5c; color: #fff; font-size: 9px; font-weight: 700;
-  border-radius: 8px; padding: 5px 0; text-align: center; margin-top: 8px;
-}
-.sg-hb-label { text-align: left !important; padding-left: 6px; }
-.sg-row {
-  display: grid; grid-template-columns: 15% repeat(9, 1fr) 11%;
-  font-family: var(--font-num); font-size: 11px; color: #857c60;
-  padding: 4px 0; text-align: center; align-items: center;
-}
-.sg-row-label { text-align: left !important; padding-left: 6px; font-family: var(--font-ui); font-weight: 600; color: #2b2620; }
-.sg-row-sum { font-weight: 700; color: #2b2620; }
-.sg-score-row { color: #2b2620; }
-.sg-net-row { color: #2e6fd4; font-weight: 600; }
-.sg-hcp { font-size: 11px; color: #8a8266; font-family: var(--font-num); margin-top: 1px; }
-input.sg-input[type="number"] {
-  width: 20px; height: 22px; padding: 0; margin: 0 auto; display: block;
-  text-align: center; border: 1px solid #e6ddc4; border-radius: 50%;
-  background: #ffffff; color: #2b2620; font-size: 11px; font-weight: 700;
-}
-span.sg-input-ro {
-  width: 20px; height: 20px; margin: 0 auto;
+/* Score chip — shape carries meaning, not color alone: circle = birdie
+ * (gold ring), double-ring circle = eagle, rounded square = bogey (coral
+ * ring), double-ring rounded square = double-bogey-or-worse, plain number
+ * (no shape) = par. */
+.score-chip {
+  width: 22px; height: 22px; margin: 0 auto; position: relative;
   display: flex; align-items: center; justify-content: center;
-  border: 1px solid #e6ddc4; border-radius: 50%;
-  background: #ffffff; color: #2b2620; font-size: 11px; font-weight: 700;
+  font-family: var(--font-num); font-size: 11px; font-weight: 700; color: var(--ink);
+  border: none; background: none; cursor: pointer; padding: 0;
 }
-.sg-footer {
-  display: flex; justify-content: space-between; margin-top: 10px;
-  font-size: 12px; color: #857c60;
+.score-chip.editable { cursor: pointer; }
+.score-chip .shape {
+  position: absolute; inset: 1px; border-radius: 50%; border: 1.5px solid transparent;
 }
-.sg-footer strong { color: #1a1a1a; margin-left: 4px; }
+.score-chip.birdie .shape { border-color: var(--gold); }
+.score-chip.eagle .shape { border: 1.5px double var(--gold); box-shadow: inset 0 0 0 3px transparent; }
+.score-chip.eagle .shape::after {
+  content: ""; position: absolute; inset: 2px; border-radius: 50%; border: 1.5px solid var(--gold);
+}
+.score-chip.bogey .shape { border-radius: 6px; border-color: var(--coral); }
+.score-chip.double .shape { border-radius: 6px; border: 1.5px solid var(--coral); }
+.score-chip.double .shape::after {
+  content: ""; position: absolute; inset: 2px; border-radius: 4px; border: 1.5px solid var(--coral);
+}
+.score-chip .to-par { position: absolute; top: 100%; font-size: 8px; color: var(--muted-55); margin-top: 1px; }
+
+/* ---- Scorecard round-history accordion ---------------------------------- */
+
+.round-card {
+  background: rgba(245, 241, 230, 0.05); border-radius: var(--radius);
+  margin-top: 10px; overflow: hidden; transition: background 180ms ease-out;
+}
+.round-card.open { background: rgba(245, 241, 230, 0.08); }
+.round-summary {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  padding: 14px; background: none; border: none; cursor: pointer; text-align: left;
+  color: inherit; font: inherit;
+}
+.round-summary-date { font-size: 12px; color: var(--muted-55); margin: 0; }
+.round-summary-course { font-size: 16px; font-weight: 700; margin: 2px 0; }
+.round-summary-hcp { font-size: 12px; color: var(--muted-55); margin: 0; }
+.round-summary-score { font-family: var(--font-num); font-size: 32px; font-weight: 700; color: var(--gold); text-align: right; margin: 0; }
+.round-summary-topar { font-size: 12px; color: var(--muted-55); text-align: right; margin: 2px 0 0; }
+.round-chevron {
+  display: block; margin: 0 auto 10px; width: 20px; height: 20px; color: var(--muted-55);
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.round-card.open .round-chevron { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .round-chevron { transition: none; }
+}
+
+/* ---- Bag screen ---------------------------------------------------------- */
+
+.bag-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; }
+.bag-row-name { font-size: 15px; font-weight: 700; margin: 0; }
+.bag-row-cat { font-size: 12px; color: var(--muted-55); margin: 1px 0 0; }
+.yardage-stepper { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.yardage-stepper button {
+  width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--card-border);
+  background: rgba(245, 241, 230, 0.06); color: var(--ink); font-size: 15px; font-weight: 700;
+  cursor: pointer; display: grid; place-items: center;
+}
+.yardage-stepper .value { font-family: var(--font-num); font-weight: 700; min-width: 42px; text-align: center; font-size: 14px; }
+.delete-btn {
+  width: 28px; height: 28px; border-radius: 50%; border: none; flex-shrink: 0;
+  background: rgba(224, 90, 78, 0.16); color: var(--coral-delete); font-size: 14px; font-weight: 700;
+  cursor: pointer; display: grid; place-items: center;
+}
+.bag-limit-warning { color: var(--coral); font-weight: 700; }
+
+.addclub-bar-wrap { position: sticky; bottom: 0; padding: 10px 0; background: linear-gradient(180deg, transparent, var(--paper) 40%); z-index: var(--z-sticky); }
+.addclub-bar {
+  display: block; margin: 0 auto; padding: 10px 22px; border-radius: 999px; border: none;
+  background: linear-gradient(160deg, var(--gold-grad-1), var(--gold-grad-2)); color: var(--gold-ink);
+  font: 700 14px var(--font-ui); cursor: pointer;
+}
+.addclub-panel {
+  background: var(--card-grad-1); border: 1px solid var(--card-border); border-radius: var(--radius);
+  padding: 12px; margin-bottom: 8px; max-height: 260px; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ---- overlays / pickers (unchanged structure, re-themed) ---------------- */
 
 .course-overlay {
   position: fixed; inset: 0; background: rgba(4, 8, 6, 0.72);
-  display: flex; align-items: flex-end; z-index: 50;
+  display: flex; align-items: flex-end; z-index: var(--z-modal);
 }
 .course-sheet {
   width: 100%; max-height: 82vh; overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  background: var(--card); border-radius: 20px 20px 0 0;
+  background: var(--card-grad-1); border-radius: 20px 20px 0 0;
   padding: 16px 16px max(16px, env(safe-area-inset-bottom));
   margin: 0 auto; max-width: 430px;
 }
 
-/* Course picker as its own full screen (GolfShot-style), not a bottom sheet */
 .picker-screen {
-  position: fixed; inset: 0; z-index: 50;
+  position: fixed; inset: 0; z-index: var(--z-modal);
   background: var(--paper);
   display: flex; flex-direction: column;
   max-width: 430px; margin: 0 auto;
@@ -329,7 +543,7 @@ span.sg-input-ro {
 .picker-header {
   display: flex; align-items: center; gap: 10px;
   padding: calc(14px + env(safe-area-inset-top)) 16px 12px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--card-border);
   flex-shrink: 0;
 }
 .picker-back {

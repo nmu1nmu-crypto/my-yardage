@@ -18,7 +18,8 @@ import {
   clubAverage,
   markShotStart,
   markShotEnd,
-  setHoleScore,
+  setScoreForHole,
+  setCurrentHole,
   nextHole,
   finishRound,
   roundStats,
@@ -26,6 +27,8 @@ import {
 import { buildMailto, formatRoundText } from "../lib/scorecardEmail.js";
 import { distanceUnit, windUnit, convertDistance, distanceLabel } from "../lib/units.js";
 import HoleView from "../components/HoleView.jsx";
+import ScoreGrid from "../components/ScoreGrid.jsx";
+import LogoMark from "../components/LogoMark.jsx";
 
 const GREEN_STEPS = [
   { key: "front", label: "front of green" },
@@ -150,20 +153,6 @@ export default function Round({ state, update, goGames }) {
     });
   }, [selectedGreen, selectedFairway, courseHazards]);
 
-  // Carry distance to each hazard's near edge from wherever the golfer is
-  // standing right now — same live-position math as the green itself.
-  // Pre-formatted for HoleView's on-image pills. Capped to the 5 closest —
-  // even with the tighter proximity filter above, a hazard-dense hole
-  // shouldn't turn into a wall of overlapping pills.
-  const hazardsForView = useMemo(() => {
-    if (!here || !nearbyHazards.length) return [];
-    return nearbyHazards
-      .map((h) => ({ ...h, sortYards: closestEdgeYards(here, h.points) }))
-      .sort((a, b) => a.sortYards - b.sortYards)
-      .slice(0, 5)
-      .map((h) => ({ kind: h.kind, points: h.points, label: String(convertDistance(h.sortYards, dUnit)) }));
-  }, [here, nearbyHazards, dUnit]);
-
   const usingAuto = !!autoDistances && !manualOverride;
   const manuallyMarked = green.front && green.middle && green.back;
 
@@ -184,6 +173,24 @@ export default function Round({ state, update, goGames }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [distances.middle, weather, here, middlePoint]);
 
+  // Nearest-average-carry club to the distance actually needed right now —
+  // purely a suggestion; tapping "Mark shot" still uses whatever club is
+  // selected in the dropdown below, never this automatically.
+  const recommended = useMemo(() => {
+    if (distances.middle == null) return null;
+    let best = null;
+    let bestDiff = Infinity;
+    for (const c of state.bag) {
+      const diff = Math.abs(clubAverage(c).yards - distances.middle);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = c;
+      }
+    }
+    return best;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.bag, distances.middle]);
+
   if (!round) {
     return (
       <div className="card" style={{ marginTop: 24 }}>
@@ -199,6 +206,7 @@ export default function Round({ state, update, goGames }) {
   const selected = state.bag.find((c) => c.id === clubId);
   const avg = selected ? clubAverage(selected) : null;
   const nextGreenStep = GREEN_STEPS.find((s) => !green[s.key]);
+  const recommendedAvg = recommended ? clubAverage(recommended) : null;
 
   async function refreshPosition() {
     try {
@@ -247,26 +255,36 @@ export default function Round({ state, update, goGames }) {
     update(nextHole);
   }
 
+  function retreatHole() {
+    resetGreen();
+    setManualOverride(false);
+    update(setCurrentHole, round.currentHole - 1);
+  }
+
   const last = round.lastLogged;
   const greenReady = usingAuto || manuallyMarked;
 
   return (
     <>
-      <div className="row" style={{ margin: "8px 0 12px" }}>
-        <div>
-          <strong style={{ fontSize: 18 }}>Hole {round.currentHole}</strong>{" "}
-          <span className="muted">Par {hole?.par ?? 4}</span>
+      <div className="game-topbar">
+        <LogoMark size={36} />
+        <div className="game-topbar-hole">
+          <strong>Hole {round.currentHole}</strong>
+          <span>Par {hole?.par ?? 4} · {round.course}</span>
         </div>
-        <span className="pill num">
-          {stats.holesPlayed
-            ? `${stats.toPar >= 0 ? "+" : ""}${stats.toPar} thru ${stats.holesPlayed}`
-            : "Round started"}
-        </span>
+        <button className="hole-nav-btn" aria-label="Previous hole" onClick={retreatHole} disabled={round.currentHole <= 1}>
+          ‹
+        </button>
+        <button className="hole-nav-btn" aria-label="Next hole" onClick={advanceHole} disabled={round.currentHole >= 18}>
+          ›
+        </button>
       </div>
 
-      <div className="card sky">
+      <div className="card">
         <div className="row">
-          <strong style={{ fontSize: 13 }}>⛳ Green complex</strong>
+          <strong style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--muted-55)" }}>
+            Distance to Pin
+          </strong>
           <div style={{ display: "flex", gap: 6 }}>
             {greenReady && (
               <span className="chip sky" style={{ padding: "3px 10px", height: "auto", cursor: "default" }}>
@@ -274,29 +292,17 @@ export default function Round({ state, update, goGames }) {
               </span>
             )}
             {usingAuto && (
-              <button
-                className="chip sky"
-                style={{ padding: "3px 10px", height: "auto" }}
-                onClick={() => setManualOverride(true)}
-              >
+              <button className="chip sky" style={{ padding: "3px 10px", height: "auto" }} onClick={() => setManualOverride(true)}>
                 Not this green?
               </button>
             )}
             {!usingAuto && manuallyMarked && (
-              <button
-                className="chip sky"
-                style={{ padding: "3px 10px", height: "auto" }}
-                onClick={resetGreen}
-              >
+              <button className="chip sky" style={{ padding: "3px 10px", height: "auto" }} onClick={resetGreen}>
                 Re-pin
               </button>
             )}
             {!usingAuto && manualOverride && autoDistances && (
-              <button
-                className="chip sky"
-                style={{ padding: "3px 10px", height: "auto" }}
-                onClick={() => setManualOverride(false)}
-              >
+              <button className="chip sky" style={{ padding: "3px 10px", height: "auto" }} onClick={() => setManualOverride(false)}>
                 Use auto-detected
               </button>
             )}
@@ -305,20 +311,35 @@ export default function Round({ state, update, goGames }) {
 
         {greenReady ? (
           <>
-            <HoleView
-              greenPoints={usingAuto ? selectedGreen.points : null}
-              fairwayPoints={usingAuto ? selectedFairway?.points : null}
-              teePoints={usingAuto ? selectedTee?.points : null}
-              hazards={usingAuto ? hazardsForView : []}
-              here={here}
-              isReal={usingAuto}
-              front={convertDistance(distances.front, dUnit)}
-              middle={convertDistance(distances.middle, dUnit)}
-              back={convertDistance(distances.back, dUnit)}
-            />
+            <div style={{ display: "flex", gap: 12, marginTop: 10, alignItems: "stretch" }}>
+              <div style={{ flex: 1.3, minWidth: 0 }}>
+                <HoleView
+                  greenPoints={usingAuto ? selectedGreen.points : null}
+                  fairwayPoints={usingAuto ? selectedFairway?.points : null}
+                  teePoints={usingAuto ? selectedTee?.points : null}
+                  hazards={usingAuto ? nearbyHazards : []}
+                  here={here}
+                  isReal={usingAuto}
+                />
+              </div>
+              <div className="distance-readouts" style={{ width: 84, flexShrink: 0, justifyContent: "space-between" }}>
+                <div className="distance-readout">
+                  <p className="label">Back</p>
+                  <p className="value num">{convertDistance(distances.back, dUnit) ?? "–"}</p>
+                </div>
+                <div className="distance-readout mid">
+                  <p className="label">Middle</p>
+                  <p className="value num">{convertDistance(distances.middle, dUnit) ?? "–"}</p>
+                </div>
+                <div className="distance-readout">
+                  <p className="label">Front</p>
+                  <p className="value num">{convertDistance(distances.front, dUnit) ?? "–"}</p>
+                </div>
+              </div>
+            </div>
             <div className="row" style={{ marginTop: 14, alignItems: "flex-end" }}>
               <span className="small" style={{ opacity: 0.8 }}>Plays like ({distanceLabel(dUnit)})</span>
-              <span className="num" style={{ fontSize: 32, fontWeight: 600, color: "var(--gold-200)" }}>
+              <span className="num" style={{ fontSize: 32, fontWeight: 700, color: "var(--gold)" }}>
                 {convertDistance(adjusted ? adjusted.adjusted : distances.middle, dUnit) ?? "—"}
               </span>
             </div>
@@ -340,18 +361,14 @@ export default function Round({ state, update, goGames }) {
           </>
         ) : (
           <>
-            <p className="small" style={{ opacity: 0.85, marginTop: 4 }}>
+            <p className="small" style={{ opacity: 0.85, marginTop: 8 }}>
               {manualOverride && autoDistances
                 ? "Switched to manual marking — tap \"Use auto-detected\" above to switch back."
                 : courseGreens.length
                   ? "No mapped green nearby yet — walk to the green once per hole and tap as you reach each spot."
                   : "This course's green isn't mapped — walk to the green once per hole and tap as you reach each spot."}
             </p>
-            <button
-              className="btn"
-              style={{ marginTop: 10, background: "var(--sky-400)", color: "var(--sky-900)" }}
-              onClick={() => markGreenPoint(nextGreenStep.key)}
-            >
+            <button className="btn" style={{ marginTop: 10 }} onClick={() => markGreenPoint(nextGreenStep.key)}>
               📍 Mark {nextGreenStep.label}
             </button>
             {(green.front || green.middle) && (
@@ -363,35 +380,24 @@ export default function Round({ state, update, goGames }) {
         )}
       </div>
 
-      <div style={{ marginTop: 14 }}>
-        <p className="muted small" style={{ marginBottom: 6 }}>
-          Club · your real carry
-        </p>
-        <div className="chips">
-          {state.bag.map((c) => (
-            <button
-              key={c.id}
-              className={`chip ${c.id === clubId ? "on" : ""}`}
-              onClick={() => !pending && setClubId(c.id)}
-            >
-              {c.short}
-            </button>
-          ))}
+      <div className="dual-panel">
+        <div className="card spotlight">
+          <p className="panel-label">Recommended Club</p>
+          <p className="panel-value">{recommended ? recommended.name : "—"}</p>
+          <p className="panel-sub">{recommendedAvg ? `${convertDistance(recommendedAvg.yards, dUnit)} ${distanceLabel(dUnit)} avg` : "Walk closer for a suggestion"}</p>
         </div>
-        {avg && (
-          <p className="small" style={{ color: "var(--pine-200)", margin: "6px 0 0" }}>
-            {selected.name} carries {convertDistance(avg.yards, dUnit)} {distanceLabel(dUnit)}{" "}
-            {avg.tracked ? `on average (${avg.tracked} tracked)` : "(your estimate — track shots to learn it)"}
-          </p>
-        )}
+        <div className="card spotlight">
+          <p className="panel-label">Last Shot</p>
+          <p className="panel-value num">{last ? `${convertDistance(last.yards, dUnit)} ${distanceLabel(dUnit)}` : "—"}</p>
+          <select value={clubId} onChange={(e) => !pending && setClubId(e.target.value)} disabled={!!pending} style={{ marginTop: 6, height: 34, fontSize: 12 }}>
+            {state.bag.map((c) => (
+              <option key={c.id} value={c.id}>{c.short} · {c.name}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      <button
-        className={`btn ${pending ? "" : "pine"}`}
-        style={{ marginTop: 14 }}
-        onClick={onMark}
-        disabled={busy}
-      >
+      <button className="btn" style={{ marginTop: 14 }} onClick={onMark} disabled={busy}>
         {busy
           ? "Reading GPS…"
           : pending
@@ -403,39 +409,22 @@ export default function Round({ state, update, goGames }) {
           ? `${selected?.short} in flight — GPS is watching the distance`
           : last
             ? last.valid
-              ? `Logged: ${state.bag.find((c) => c.id === last.clubId)?.short} · ${convertDistance(last.yards, dUnit)} ${distanceLabel(dUnit)} — added to your averages`
+              ? `Logged: added to your averages`
               : `Ignored a ${convertDistance(last.yards, dUnit)} ${distanceLabel(dUnit)} reading (out of range)`
-            : "One tap here, one tap at your ball"}
+            : avg
+              ? `${selected.name} carries ${convertDistance(avg.yards, dUnit)} ${distanceLabel(dUnit)} ${avg.tracked ? `on average (${avg.tracked} tracked)` : "(your estimate — track shots to learn it)"}`
+              : "One tap here, one tap at your ball"}
       </p>
       {msg && <p className="muted small" style={{ textAlign: "center" }}>{msg}</p>}
 
-      <div className="card">
-        <div className="row">
-          <strong style={{ fontSize: 14 }}>Score this hole</strong>
-          <span className="pill num">Hole {round.currentHole}</span>
-        </div>
-        {round.players.map((p) => (
-          <div className="list-row row" key={p}>
-            <span style={{ fontSize: 14 }}>{p}</span>
-            <div style={{ display: "flex", gap: 6 }}>
-              {[3, 4, 5, 6, 7, 8].map((n) => (
-                <button
-                  key={n}
-                  className={`chip num ${hole?.strokes[p] === n ? "on" : ""}`}
-                  onClick={() => update(setHoleScore, p, n, hole?.par ?? 4)}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+      <ScoreGrid
+        round={round}
+        editable
+        currentHole={round.currentHole}
+        onScoreChange={(holeNumber, player, strokes, par) => update(setScoreForHole, holeNumber, player, strokes, par)}
+      />
 
       <div className="row" style={{ marginTop: 12, gap: 8 }}>
-        <button className="btn ghost" style={{ flex: 1 }} onClick={advanceHole}>
-          Next hole →
-        </button>
         <button className="btn ghost" style={{ flex: 1 }} onClick={goGames}>
           🪙 Games
         </button>

@@ -43,6 +43,19 @@ export const CLUB_LIBRARY = [
 
 const MAX_CLUBS = 14;
 
+/** Category label for the Bag screen's row subtitle — derived from the
+ * name rather than stored on each club object, so it stays correct for
+ * clubs already saved in a device's localStorage from before this field
+ * existed. */
+export function clubCategory(name) {
+  const n = (name || "").toLowerCase();
+  if (n.includes("wood")) return "Wood";
+  if (n.includes("hybrid")) return "Hybrid";
+  if (n.includes("iron")) return "Iron";
+  if (n.includes("wedge") || /°/.test(name || "")) return "Wedge";
+  return "Club";
+}
+
 function blank() {
   return {
     bag: DEFAULT_BAG,
@@ -413,6 +426,21 @@ export function nextHole(state) {
   return {
     ...state,
     activeRound: { ...r, currentHole: Math.min(r.currentHole + 1, 18), pendingShot: null },
+  };
+}
+
+/** Direct hole navigation for the Game screen's prev/next chevrons —
+ * clamped to 1-18. Unlike nextHole (called when actually finishing a hole
+ * during play, which also retires that hole's auto-detected green/fairway/
+ * tee so they're never suggested again), this only moves which hole's
+ * scorecard column/GPS target is in view — going back to correct an
+ * earlier score doesn't un-retire anything. */
+export function setCurrentHole(state, number) {
+  const r = state.activeRound;
+  if (!r) return state;
+  return {
+    ...state,
+    activeRound: { ...r, currentHole: Math.min(18, Math.max(1, number)), pendingShot: null },
   };
 }
 

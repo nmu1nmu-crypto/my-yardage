@@ -2,142 +2,98 @@ import { useState } from "react";
 import {
   CLUB_LIBRARY,
   clubAverage,
+  clubCategory,
   addClub,
   removeClub,
   setManualYards,
 } from "../lib/store.js";
-import { distanceUnit, convertDistance, distanceLabel, toYards } from "../lib/units.js";
+import { distanceUnit, convertDistance, toYards } from "../lib/units.js";
+import LogoMark from "../components/LogoMark.jsx";
+
+const STEP_YARDS = 5;
+const FLOOR_YARDS = 30;
+const MAX_CLUBS = 14;
 
 export default function Bag({ state, update }) {
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [editing, setEditing] = useState(null); // club id
-  const [draftYards, setDraftYards] = useState("");
   const dUnit = distanceUnit(state);
 
   const inBag = new Set(state.bag.map((c) => c.id));
   const available = CLUB_LIBRARY.filter((c) => !inBag.has(c.id));
 
-  function commitEdit(id) {
-    const entered = parseInt(draftYards, 10);
-    const yards = toYards(entered, dUnit);
-    if (yards != null && !Number.isNaN(yards) && yards > 0 && yards < 400) update(setManualYards, id, yards);
-    setEditing(null);
+  function step(id, currentYards, dir) {
+    const nextDisplay = Math.max(FLOOR_YARDS, convertDistance(currentYards, dUnit) + dir * STEP_YARDS);
+    const yards = toYards(nextDisplay, dUnit);
+    update(setManualYards, id, Math.round(yards));
   }
 
   return (
     <>
       <div className="row" style={{ margin: "8px 0 4px" }}>
-        <strong style={{ fontSize: 18 }}>My bag</strong>
-        <span className="pill num">{state.bag.length} of 14 clubs</span>
+        <LogoMark size={36} />
+        <div style={{ textAlign: "center", flex: 1 }}>
+          <strong style={{ fontSize: 17 }}>My Bag</strong>
+          <p className="muted small" style={{ margin: 0 }}>Tap a yardage to adjust</p>
+        </div>
+        <span className={`pill ${state.bag.length >= MAX_CLUBS ? "" : "gold"}`} style={state.bag.length >= MAX_CLUBS ? { background: "rgba(217,119,87,0.16)" } : undefined}>
+          <span className={state.bag.length >= MAX_CLUBS ? "bag-limit-warning" : ""}>{state.bag.length}/{MAX_CLUBS} clubs</span>
+        </span>
       </div>
-      <p className="muted small" style={{ marginTop: 0 }}>
-        Carries update automatically as you track shots
-      </p>
 
       <div className="card">
         {state.bag.map((c) => {
           const { yards, tracked } = clubAverage(c);
           return (
-            <div className="list-row row" key={c.id}>
-              <div
-                style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 10,
-                  background: "var(--pine-800)",
-                  color: "var(--pine-100)",
-                  display: "grid",
-                  placeItems: "center",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  flexShrink: 0,
-                }}
-              >
-                {c.short}
-              </div>
+            <div className="bag-row list-row" key={c.id}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14 }}>{c.name}</div>
-                {editing === c.id ? (
-                  <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-                    <input
-                      type="number"
-                      value={draftYards}
-                      onChange={(e) => setDraftYards(e.target.value)}
-                      style={{ height: 34, width: 70 }}
-                      autoFocus
-                    />
-                    <span className="muted small" style={{ alignSelf: "center" }}>{distanceLabel(dUnit)}</span>
-                    <button className="chip on" onClick={() => commitEdit(c.id)}>
-                      Save
-                    </button>
-                  </div>
-                ) : (
-                  <div className="small num" style={{ color: "var(--pine-200)" }}>
-                    {convertDistance(yards, dUnit)} {distanceLabel(dUnit)} {tracked ? "avg carry" : "estimated"}
-                  </div>
-                )}
+                <p className="bag-row-name">{c.name}</p>
+                <p className="bag-row-cat">{clubCategory(c.name)}</p>
               </div>
-              <span className={tracked ? "muted small" : "pill gold"}>
-                {tracked ? `${tracked} shots` : "manual"}
-              </span>
-              <button
-                className="chip"
-                aria-label={`Edit ${c.name}`}
-                onClick={() => {
-                  setEditing(c.id);
-                  setDraftYards(String(convertDistance(yards, dUnit)));
-                }}
-              >
-                ✎
-              </button>
-              <button
-                className="chip"
-                aria-label={`Remove ${c.name}`}
-                style={{ color: "var(--clay-500)" }}
-                onClick={() => update(removeClub, c.id)}
-              >
-                🗑
+              <div className="yardage-stepper">
+                <button aria-label={`Decrease ${c.name} yardage`} onClick={() => step(c.id, yards, -1)}>−</button>
+                <span className="value">{convertDistance(yards, dUnit)}</span>
+                <button aria-label={`Increase ${c.name} yardage`} onClick={() => step(c.id, yards, 1)}>+</button>
+              </div>
+              <span className="muted small" style={{ flexShrink: 0 }}>{tracked ? `${tracked}✓` : "est."}</span>
+              <button className="delete-btn" aria-label={`Remove ${c.name}`} onClick={() => update(removeClub, c.id)}>
+                ✕
               </button>
             </div>
           );
         })}
       </div>
 
-      {state.bag.length < 14 && (
-        <button className="btn ghost" style={{ marginTop: 12 }} onClick={() => setPickerOpen((o) => !o)}>
-          + Add a club
-        </button>
-      )}
-
-      {pickerOpen && (
-        <div className="card" style={{ background: "var(--pine-50)", border: "none" }}>
-          <strong className="small" style={{ color: "var(--pine-800)" }}>
-            Pick a club to add
-          </strong>
-          <div className="chips" style={{ marginTop: 8 }}>
-            {available.length === 0 && (
-              <span className="small" style={{ color: "var(--pine-600)" }}>
-                Nothing left to add
-              </span>
-            )}
-            {available.map((c) => (
-              <button
-                key={c.id}
-                className="chip"
-                style={{ background: "#ffffff", color: "var(--pine-800)", borderColor: "var(--pine-100)" }}
-                onClick={() => update(addClub, c)}
-              >
-                {c.short} · {c.name}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       <p className="muted small" style={{ marginTop: 12 }}>
-        Removed clubs keep their shot history — add one back and it resumes
-        where it left off.
+        Removed clubs keep their shot history — add one back and it resumes where it left off.
       </p>
+
+      <div className="addclub-bar-wrap">
+        {pickerOpen && (
+          <div className="addclub-panel">
+            <p className="muted small" style={{ marginTop: 0 }}>Clubs not in your bag</p>
+            <div className="chips">
+              {available.length === 0 && <span className="muted small">Nothing left to add</span>}
+              {available.map((c) => (
+                <button
+                  key={c.id}
+                  className="chip"
+                  onClick={() => {
+                    update(addClub, c);
+                    if (available.length <= 1) setPickerOpen(false);
+                  }}
+                >
+                  {c.short} · {c.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {state.bag.length < MAX_CLUBS && (
+          <button className="addclub-bar" onClick={() => setPickerOpen((o) => !o)}>
+            + Add Club
+          </button>
+        )}
+      </div>
     </>
   );
 }

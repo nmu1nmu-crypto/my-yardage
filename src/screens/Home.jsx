@@ -5,9 +5,9 @@ import { searchCourses, fetchCourseHoles, fetchCourseTees, ATTRIBUTION } from ".
 import { fetchCourseGeometry } from "../lib/greenApi.js";
 import { buildMailto, formatAllRoundsText } from "../lib/scorecardEmail.js";
 import { distanceUnit, convertDistance, distanceLabel } from "../lib/units.js";
-import logo from "../assets/brand/logo-1024.png";
+import Gauge from "../components/Gauge.jsx";
 
-const MAX_PLAYERS = 4;
+const MAX_EXTRA_PLAYERS = 3;
 const AVG_WINDOWS = [
   { label: "5", n: 5 },
   { label: "10", n: 10 },
@@ -15,10 +15,15 @@ const AVG_WINDOWS = [
   { label: "All", n: null },
 ];
 
+function initial(name) {
+  return (name || "?").trim().charAt(0).toUpperCase() || "?";
+}
+
 export default function Home({ state, hero, update, onStartRound }) {
   const profileName = state.profile?.name || "You";
   const dUnit = distanceUnit(state);
-  const [playerBoxes, setPlayerBoxes] = useState([profileName]);
+  const [extraPlayers, setExtraPlayers] = useState([]); // names of players 2..4
+  const [pickerOpenIdx, setPickerOpenIdx] = useState(null);
   const [selectedCourse, setSelectedCourse] = useState(null); // { id, name, holes, tees }
   const [selectedTee, setSelectedTee] = useState(null); // { key, name, color, gender, rating, slope }
   const [avgWindow, setAvgWindow] = useState(null); // null = all rounds
@@ -59,39 +64,31 @@ export default function Home({ state, hero, update, onStartRound }) {
       full.length
     ).toFixed(1);
   })();
+  const lastRoundScore = (() => {
+    const last = state.rounds.find((r) => roundStats(r).holesPlayed >= 9);
+    return last ? roundStats(last).strokes : null;
+  })();
 
   const handicapCalc = calculatedHandicapIndex(state.rounds, profileName);
   const badgeHandicap = handicapCalc?.index ?? state.golfers?.[profileName]?.handicapIndex ?? null;
   const currentCourse = state.profile?.currentCourse || null;
 
-  const bagPreview = state.bag.slice(0, 8);
-  const maxYards = Math.max(...bagPreview.map((c) => clubAverage(c).yards), 1);
-  const trackedTotal = state.bag.reduce((s, c) => s + c.shots.length, 0);
-  const playerNames = playerBoxes.map((p) => p.trim()).filter(Boolean).slice(0, MAX_PLAYERS);
+  const playerNames = [profileName, ...extraPlayers.map((p) => p.trim()).filter(Boolean)].slice(0, 1 + MAX_EXTRA_PLAYERS);
   const knownPlayers = Object.keys(state.golfers || {})
-    .filter((n) => !playerNames.includes(n))
+    .filter((n) => n !== profileName && !extraPlayers.includes(n))
     .sort();
 
-  function updateBox(i, value) {
-    setPlayerBoxes((boxes) => boxes.map((b, idx) => (idx === i ? value : b)));
+  function updateExtra(i, value) {
+    setExtraPlayers((boxes) => boxes.map((b, idx) => (idx === i ? value : b)));
+    setPickerOpenIdx(null);
   }
 
-  function addBox() {
-    setPlayerBoxes((boxes) => (boxes.length < MAX_PLAYERS ? [...boxes, ""] : boxes));
+  function addExtra() {
+    setExtraPlayers((boxes) => (boxes.length < MAX_EXTRA_PLAYERS ? [...boxes, ""] : boxes));
   }
 
-  function removeBox(i) {
-    setPlayerBoxes((boxes) => (boxes.length > 1 ? boxes.filter((_, idx) => idx !== i) : boxes));
-  }
-
-  function addKnownPlayer(name) {
-    if (!name) return;
-    setPlayerBoxes((boxes) => {
-      const emptyIdx = boxes.findIndex((b) => !b.trim());
-      if (emptyIdx >= 0) return boxes.map((b, idx) => (idx === emptyIdx ? name : b));
-      if (boxes.length < MAX_PLAYERS) return [...boxes, name];
-      return boxes;
-    });
+  function removeExtra(i) {
+    setExtraPlayers((boxes) => boxes.filter((_, idx) => idx !== i));
   }
 
   function saveProfile() {
@@ -102,9 +99,6 @@ export default function Home({ state, hero, update, onStartRound }) {
       email: emailDraft.trim(),
       units: { distance: distanceUnitDraft, wind: windUnitDraft },
     });
-    if (trimmed && trimmed !== profileName) {
-      setPlayerBoxes((boxes) => boxes.map((b, i) => (i === 0 && b === profileName ? trimmed : b)));
-    }
     if (!handicapCalc) {
       const parsed = parseFloat(handicapDraft);
       update(setHandicapIndex, finalName, Number.isNaN(parsed) ? null : parsed);
@@ -257,7 +251,7 @@ export default function Home({ state, hero, update, onStartRound }) {
         </button>
         <div className="row" style={{ gap: 8, width: "auto", flexShrink: 0 }}>
           {c.distance_mi != null && (
-            <span className="small num" style={{ color: "var(--pine-200)" }}>
+            <span className="small num" style={{ color: "var(--gold)" }}>
               {c.distance_mi.toFixed(1)} mi
             </span>
           )}
@@ -280,6 +274,16 @@ export default function Home({ state, hero, update, onStartRound }) {
     const reader = new FileReader();
     reader.onload = () => update(setAvatar, reader.result);
     reader.readAsDataURL(file);
+  }
+
+  function openProfile() {
+    setNameDraft(profileName);
+    setEmailDraft(state.profile?.email || "");
+    setDistanceUnitDraft(state.profile?.units?.distance || "yards");
+    setWindUnitDraft(state.profile?.units?.wind || "mph");
+    setHandicapDraft(state.golfers?.[profileName]?.handicapIndex ?? "");
+    setImportMsg("");
+    setProfileOpen(true);
   }
 
   function start(course) {
@@ -311,118 +315,138 @@ export default function Home({ state, hero, update, onStartRound }) {
         className="hero hero--photo"
         style={
           hero && {
-            backgroundImage: `linear-gradient(rgba(4,52,44,0.15), rgba(4,52,44,0.82) 75%), url(${hero.src})`,
+            backgroundImage: `url(${hero.src})`,
           }
         }
       >
         <div className="row" style={{ alignItems: "flex-start" }}>
-          <button
-            className="avatar-btn"
-            onClick={() => avatarInputRef.current?.click()}
-            aria-label="Change profile photo"
-          >
-            {state.profile?.avatar ? (
-              <img src={state.profile.avatar} alt="" />
-            ) : (
-              <img src={logo} alt="" />
-            )}
-          </button>
-          <input
-            ref={avatarInputRef}
-            type="file"
-            accept="image/*"
-            style={{ display: "none" }}
-            onChange={onAvatarFile}
-          />
-
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p className="hero-greeting">Hi, {profileName}</p>
-            {badgeHandicap != null && (
-              <span className="pill gold" style={{ marginTop: 4 }}>HCP {badgeHandicap}</span>
-            )}
+            <p className="hero-greeting">Good morning, {profileName}</p>
           </div>
-
-          <button
-            className="chip"
-            style={{ background: "rgba(255,255,255,0.14)", border: "none", color: "var(--pine-50)", flexShrink: 0 }}
-            onClick={() => {
-              setNameDraft(profileName);
-              setEmailDraft(state.profile?.email || "");
-              setDistanceUnitDraft(state.profile?.units?.distance || "yards");
-              setWindUnitDraft(state.profile?.units?.wind || "mph");
-              setHandicapDraft(state.golfers?.[profileName]?.handicapIndex ?? "");
-              setImportMsg("");
-              setProfileOpen(true);
-            }}
-            aria-label="Profile settings"
-          >
-            ⚙
+          <button className="avatar-btn" onClick={openProfile} aria-label="Profile">
+            👤
           </button>
         </div>
 
         <div className="hero-course">
           {currentCourse ? (
-            <>
-              <p className="hero-course-name">📍 {currentCourse.name}</p>
-              {(currentCourse.city || currentCourse.state) && (
-                <p className="hero-course-loc">
-                  {[currentCourse.city, currentCourse.state].filter(Boolean).join(", ")}
-                </p>
-              )}
-            </>
+            <p className="hero-course-name">{currentCourse.name}</p>
           ) : (
-            <p className="hero-course-name">📍 No course selected yet</p>
+            <p className="hero-course-name">No course selected yet</p>
           )}
           <button className="hero-change-btn" onClick={openCoursePicker}>
-            {currentCourse ? "Select different course" : "Choose a course"}
+            {currentCourse ? "Change course" : "Choose a course"}
           </button>
         </div>
       </header>
 
-      <button className="btn raise" onClick={openCoursePicker}>
-        ▶ Start a round
-      </button>
+      <div className="card mycard">
+        <div className="row" style={{ alignItems: "center" }}>
+          <div className="row" style={{ gap: 12, width: "auto", flex: 1 }}>
+            <div className="mycard-avatar">
+              {state.profile?.avatar ? <img src={state.profile.avatar} alt="" /> : initial(profileName)}
+            </div>
+            <div>
+              <p className="mycard-name">{profileName}</p>
+              <p className="mycard-sub">Handicap Index</p>
+            </div>
+          </div>
+          <Gauge value={badgeHandicap} />
+        </div>
+        <div className="stat-tile-row">
+          <div className="stat-tile">
+            <p className="label">Avg score</p>
+            <p className="value num">{avgScore}</p>
+          </div>
+          <div className="stat-tile">
+            <p className="label">Last round</p>
+            <p className="value num">{lastRoundScore ?? "—"}</p>
+          </div>
+        </div>
+        {state.rounds.length > 1 && (
+          <div className="row" style={{ marginTop: 10, gap: 6, justifyContent: "flex-start" }}>
+            <span className="muted small">Average over</span>
+            {AVG_WINDOWS.map((w) => (
+              <button
+                key={w.label}
+                className={`chip ${avgWindow === w.n ? "on" : ""}`}
+                style={{ padding: "3px 10px" }}
+                onClick={() => setAvgWindow(w.n)}
+              >
+                {w.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
-      <div className="card" style={{ marginTop: 14 }}>
-        <label className="muted small">
-          Playing with (up to {MAX_PLAYERS})
-        </label>
+      <div className="card">
+        <div className="row">
+          <strong style={{ fontSize: 14 }}>Players</strong>
+          <span className="muted small">{playerNames.length} of {1 + MAX_EXTRA_PLAYERS} added</span>
+        </div>
 
-        {playerBoxes.map((box, i) => (
-          <div key={i} className="row" style={{ gap: 6, marginTop: 6 }}>
-            <input
-              type="text"
-              value={box}
-              onChange={(e) => updateBox(i, e.target.value)}
-              placeholder={i === 0 ? profileName : `Player ${i + 1}`}
-            />
-            {playerBoxes.length > 1 && (
-              <button className="chip" style={{ flexShrink: 0 }} onClick={() => removeBox(i)} aria-label="Remove player">
+        <div className="player-row-card">
+          <div className="player-avatar">{initial(profileName)}</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>{profileName}</div>
+            {badgeHandicap != null && <div className="muted small">HCP {badgeHandicap}</div>}
+          </div>
+        </div>
+
+        {extraPlayers.map((name, i) => (
+          <div key={i}>
+            <div className="player-row-card">
+              <div className="player-avatar">{initial(name || `P${i + 2}`)}</div>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => updateExtra(i, e.target.value)}
+                placeholder={`Player ${i + 2}`}
+                style={{ flex: 1 }}
+              />
+              {state.golfers?.[name]?.handicapIndex != null && (
+                <span className="muted small" style={{ flexShrink: 0 }}>HCP {state.golfers[name].handicapIndex}</span>
+              )}
+              <button
+                className="player-chevron"
+                aria-label="Swap in a recent player"
+                onClick={() => setPickerOpenIdx(pickerOpenIdx === i ? null : i)}
+              >
+                {pickerOpenIdx === i ? "▲" : "▼"}
+              </button>
+              <button className="player-chevron" aria-label="Remove player" onClick={() => removeExtra(i)}>
                 ✕
               </button>
+            </div>
+            {pickerOpenIdx === i && knownPlayers.length > 0 && (
+              <div className="chips" style={{ marginBottom: 8 }}>
+                {knownPlayers.map((n) => (
+                  <button key={n} className="chip" onClick={() => updateExtra(i, n)}>
+                    {n}{state.golfers[n]?.handicapIndex != null ? ` (${state.golfers[n].handicapIndex})` : ""}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         ))}
 
-        {playerBoxes.length < MAX_PLAYERS && (
-          <button className="btn ghost" style={{ marginTop: 8, height: 40 }} onClick={addBox}>
+        {extraPlayers.length < MAX_EXTRA_PLAYERS && (
+          <button className="btn ghost" style={{ marginTop: 8, height: 40 }} onClick={addExtra}>
             + Add player
           </button>
         )}
 
-        {knownPlayers.length > 0 && playerNames.length < MAX_PLAYERS && (
+        {knownPlayers.length > 0 && (
           <div style={{ marginTop: 10 }}>
-            <div className="row">
-              <p className="muted small" style={{ marginBottom: 0 }}>Previously played with</p>
-              <button
-                className="small"
-                style={{ background: "none", border: "none", color: "var(--pine-200)", cursor: "pointer", padding: 0 }}
-                onClick={() => setManagingPlayers((m) => !m)}
-              >
-                {managingPlayers ? "Done" : "Manage"}
-              </button>
-            </div>
-            {managingPlayers ? (
+            <button
+              className="small"
+              style={{ background: "none", border: "none", color: "var(--gold)", cursor: "pointer", padding: 0 }}
+              onClick={() => setManagingPlayers((m) => !m)}
+            >
+              {managingPlayers ? "Done managing" : "Manage remembered players"}
+            </button>
+            {managingPlayers && (
               <div style={{ marginTop: 6 }}>
                 {knownPlayers.map((n) => (
                   <div key={n} className="list-row row">
@@ -431,7 +455,7 @@ export default function Home({ state, hero, update, onStartRound }) {
                     </span>
                     <button
                       className="chip"
-                      style={{ color: "var(--clay-500)" }}
+                      style={{ color: "var(--coral-delete)" }}
                       onClick={() => update(removeGolfer, n)}
                     >
                       🗑 Delete
@@ -439,66 +463,21 @@ export default function Home({ state, hero, update, onStartRound }) {
                   </div>
                 ))}
               </div>
-            ) : (
-              <select
-                value=""
-                onChange={(e) => addKnownPlayer(e.target.value)}
-                style={{ marginTop: 6 }}
-              >
-                <option value="" disabled>+ Add a previous player…</option>
-                {knownPlayers.map((n) => (
-                  <option key={n} value={n}>
-                    {n}{state.golfers[n]?.handicapIndex != null ? ` (${state.golfers[n].handicapIndex})` : ""}
-                  </option>
-                ))}
-              </select>
             )}
           </div>
         )}
-
       </div>
 
-      {state.rounds.length > 1 && (
-        <div className="row" style={{ marginTop: 12, gap: 6, justifyContent: "flex-start" }}>
-          <span className="muted small">Average over</span>
-          {AVG_WINDOWS.map((w) => (
-            <button
-              key={w.label}
-              className={`chip ${avgWindow === w.n ? "on" : ""}`}
-              style={{ padding: "3px 10px" }}
-              onClick={() => setAvgWindow(w.n)}
-            >
-              {w.label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div className="metric-row">
-        <div className="metric">
-          <p className="label">Rounds</p>
-          <p className="value num">{state.rounds.length}</p>
-        </div>
-        <div className="metric">
-          <p className="label">Avg score</p>
-          <p className="value num">{avgScore}</p>
-        </div>
-        <div className="metric gold">
-          <p className="label">Handicap</p>
-          <p className="value num">{badgeHandicap ?? "—"}</p>
-        </div>
-      </div>
+      <button className="btn" style={{ marginTop: 14 }} onClick={openCoursePicker}>
+        Start Round
+      </button>
 
       <div className="card">
-        <div className="row">
-          <strong style={{ fontSize: 14 }}>Your bag</strong>
-          <span className="small" style={{ color: "var(--pine-200)" }}>
-            {trackedTotal} shots tracked
-          </span>
-        </div>
+        <strong style={{ fontSize: 14 }}>Your bag</strong>
         <div className="clubbar">
-          {bagPreview.map((c) => {
+          {state.bag.slice(0, 8).map((c) => {
             const { yards } = clubAverage(c);
+            const maxYards = Math.max(...state.bag.slice(0, 8).map((x) => clubAverage(x).yards), 1);
             return (
               <div className="col" key={c.id}>
                 <div
@@ -640,7 +619,7 @@ export default function Home({ state, hero, update, onStartRound }) {
 
             {selectedCourse && (
               <>
-                <p className="small" style={{ color: "var(--pine-200)", marginTop: 10 }}>
+                <p className="small" style={{ color: "var(--gold)", marginTop: 10 }}>
                   {selectedCourse.name}
                   {selectedCourse.holes ? ` · par/yardage loaded for ${selectedCourse.holes.length} holes` : " · no hole data available"}
                 </p>
@@ -663,8 +642,8 @@ export default function Home({ state, hero, update, onStartRound }) {
                     No tee ratings available for this course — net scoring won't be available this round.
                   </p>
                 )}
-                <button className="btn pine" style={{ marginTop: 16 }} onClick={() => start(selectedCourse)}>
-                  ▶ Start round at {selectedCourse.name}
+                <button className="btn" style={{ marginTop: 16 }} onClick={() => start(selectedCourse)}>
+                  Start round at {selectedCourse.name}
                 </button>
               </>
             )}
@@ -673,118 +652,105 @@ export default function Home({ state, hero, update, onStartRound }) {
       )}
 
       {profileOpen && (
-        <div className="course-overlay">
-          <div className="course-sheet">
-            <div className="row">
-              <strong style={{ fontSize: 16 }}>Your profile</strong>
-              <button className="chip" onClick={() => setProfileOpen(false)}>✕</button>
-            </div>
-
-            <p className="muted small" style={{ marginTop: 14, marginBottom: 4 }}>Your name</p>
-            <input
-              type="text"
-              value={nameDraft}
-              onChange={(e) => setNameDraft(e.target.value)}
-              placeholder="You"
-            />
-
-            <p className="muted small" style={{ marginTop: 10, marginBottom: 4 }}>Your email</p>
-            <input
-              type="email"
-              value={emailDraft}
-              onChange={(e) => setEmailDraft(e.target.value)}
-              placeholder="you@example.com"
-            />
-
-            <label className="row" style={{ marginTop: 12, gap: 8, cursor: "pointer", justifyContent: "flex-start" }}>
+        <div className="profile-screen">
+          <div className="profile-topbar">
+            <button className="profile-topbar-btn" onClick={() => setProfileOpen(false)} aria-label="Back">‹</button>
+            <span className="profile-topbar-title">Profile</span>
+            <button className="profile-save" onClick={saveProfile}>Save</button>
+          </div>
+          <div className="profile-body">
+            <div className="row" style={{ gap: 12, justifyContent: "flex-start" }}>
+              <button
+                className="mycard-avatar"
+                style={{ width: 56, height: 56, border: "none", cursor: "pointer" }}
+                onClick={() => avatarInputRef.current?.click()}
+                aria-label="Change profile photo"
+              >
+                {state.profile?.avatar ? <img src={state.profile.avatar} alt="" /> : initial(nameDraft)}
+              </button>
               <input
-                type="checkbox"
-                checked={!!state.profile?.emailScorecardOnFinish}
-                onChange={(e) => update(setProfile, { emailScorecardOnFinish: e.target.checked })}
-                style={{ width: 18, height: 18, flexShrink: 0 }}
+                ref={avatarInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: "none" }}
+                onChange={onAvatarFile}
               />
-              <span style={{ fontSize: 14 }}>Email me the scorecard when I finish a round</span>
-            </label>
-
-            <p className="muted small" style={{ marginTop: 14, marginBottom: 4 }}>Distances</p>
-            <div className="chips">
-              <button
-                className={`chip ${distanceUnitDraft === "yards" ? "on" : ""}`}
-                onClick={() => setDistanceUnitDraft("yards")}
-              >
-                Yards
-              </button>
-              <button
-                className={`chip ${distanceUnitDraft === "meters" ? "on" : ""}`}
-                onClick={() => setDistanceUnitDraft("meters")}
-              >
-                Meters
-              </button>
-            </div>
-
-            <p className="muted small" style={{ marginTop: 10, marginBottom: 4 }}>Wind speed</p>
-            <div className="chips">
-              <button
-                className={`chip ${windUnitDraft === "mph" ? "on" : ""}`}
-                onClick={() => setWindUnitDraft("mph")}
-              >
-                mph
-              </button>
-              <button
-                className={`chip ${windUnitDraft === "kph" ? "on" : ""}`}
-                onClick={() => setWindUnitDraft("kph")}
-              >
-                kph
-              </button>
-            </div>
-
-            <p className="muted small" style={{ marginTop: 10 }}>
-              No accounts here — this just saves your details on this device, the same way
-              your bag already does, so you don't have to retype them every round. Emailing
-              opens your phone's Mail app with everything filled in — you still tap send.
-            </p>
-            <button className="btn pine" style={{ marginTop: 12 }} onClick={saveProfile}>
-              Save
-            </button>
-
-            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
-              <div className="row">
-                <strong style={{ fontSize: 14 }}>Your handicap</strong>
-                {handicapCalc && (
-                  <span className="muted small">{handicapCalc.roundsUsed} round{handicapCalc.roundsUsed === 1 ? "" : "s"}</span>
-                )}
+              <div style={{ flex: 1 }}>
+                <p className="field-label" style={{ margin: "0 0 6px" }}>Name</p>
+                <input
+                  type="text"
+                  value={nameDraft}
+                  onChange={(e) => setNameDraft(e.target.value)}
+                  placeholder="You"
+                />
               </div>
+            </div>
+
+            <p className="field-label">Email Scorecards</p>
+            <div className="card" style={{ marginTop: 0 }}>
+              <input
+                type="email"
+                value={emailDraft}
+                onChange={(e) => setEmailDraft(e.target.value)}
+                placeholder="you@email.com"
+              />
+              <label className="checkbox-row" style={{ marginTop: 12 }}>
+                <span
+                  className={`checkbox-box ${state.profile?.emailScorecardOnFinish ? "checked" : ""}`}
+                  onClick={() => update(setProfile, { emailScorecardOnFinish: !state.profile?.emailScorecardOnFinish })}
+                >
+                  {state.profile?.emailScorecardOnFinish ? "✓" : ""}
+                </span>
+                <span style={{ fontSize: 14 }}>Email me my scorecard after each round</span>
+              </label>
+            </div>
+
+            <p className="field-label">Distance Units</p>
+            <div className="segmented">
+              <button className={distanceUnitDraft === "yards" ? "on" : ""} onClick={() => setDistanceUnitDraft("yards")}>Yards</button>
+              <button className={distanceUnitDraft === "meters" ? "on" : ""} onClick={() => setDistanceUnitDraft("meters")}>Meters</button>
+            </div>
+
+            <p className="field-label">Wind Speed</p>
+            <div className="segmented">
+              <button className={windUnitDraft === "mph" ? "on" : ""} onClick={() => setWindUnitDraft("mph")}>mph</button>
+              <button className={windUnitDraft === "kph" ? "on" : ""} onClick={() => setWindUnitDraft("kph")}>kph</button>
+            </div>
+
+            <p className="field-label">Handicap Index</p>
+            <div className="card" style={{ marginTop: 0 }}>
               {handicapCalc ? (
                 <>
-                  <p className="value num" style={{ fontSize: 28, margin: "4px 0 0", color: "var(--pine-200)" }}>
+                  <div className="row">
+                    <span className="muted small">Calculated from your rounds</span>
+                    <span className="muted small">{handicapCalc.roundsUsed} round{handicapCalc.roundsUsed === 1 ? "" : "s"}</span>
+                  </div>
+                  <p className="value num" style={{ fontSize: 28, margin: "4px 0 0", color: "var(--gold)" }}>
                     {handicapCalc.index}
                   </p>
                   <p className="muted small" style={{ margin: "2px 0 0" }}>
                     {handicapCalc.roundsUsed < 3
-                      ? "Provisional — plays more rounds with a linked course for a stable estimate."
-                      : "Estimated from your linked-course rounds (WHS-style) — not an official handicap."}
+                      ? "Provisional — play more rounds with a linked course for a stable estimate."
+                      : "Estimated (WHS-style) from your linked-course rounds — not an official handicap."}
                   </p>
                 </>
               ) : (
                 <>
-                  <p className="muted small" style={{ marginTop: 4, marginBottom: 6 }}>
-                    Set a default until we can calculate one from your rounds — link a course
-                    with tee ratings and complete 18 holes to have it take over automatically.
-                  </p>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="0.1"
-                    value={handicapDraft}
-                    onChange={(e) => setHandicapDraft(e.target.value)}
-                    placeholder="e.g. 14.2"
-                    style={{ width: 90 }}
-                  />
+                  <p className="muted small" style={{ marginTop: 0 }}>Manually update your handicap</p>
+                  <div className="stepper">
+                    <button onClick={() => setHandicapDraft((h) => (Math.round((parseFloat(h || 0) - 0.1) * 10) / 10).toFixed(1))}>−</button>
+                    <span className="stepper-value num">{handicapDraft === "" ? "—" : handicapDraft}</span>
+                    <button onClick={() => setHandicapDraft((h) => (Math.round((parseFloat(h || 0) + 0.1) * 10) / 10).toFixed(1))}>+</button>
+                  </div>
                 </>
               )}
             </div>
 
-            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
+            <button className="btn" style={{ marginTop: 20 }} onClick={saveProfile}>
+              Save
+            </button>
+
+            <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid var(--card-border)" }}>
               <strong style={{ fontSize: 14 }}>All scorecards</strong>
               <p className="muted small" style={{ marginTop: 4 }}>
                 Email a compact summary of every round you've played ({state.rounds.length} so far).
@@ -794,7 +760,7 @@ export default function Home({ state, hero, update, onStartRound }) {
               </button>
             </div>
 
-            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--line)" }}>
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--card-border)" }}>
               <strong style={{ fontSize: 14 }}>Backup</strong>
               <p className="muted small" style={{ marginTop: 4 }}>
                 Everything lives only on this device. Export a copy so a lost phone or
@@ -819,7 +785,7 @@ export default function Home({ state, hero, update, onStartRound }) {
                 style={{ display: "none" }}
                 onChange={onImportFile}
               />
-              {importMsg && <p className="small" style={{ marginTop: 8, color: "var(--pine-200)" }}>{importMsg}</p>}
+              {importMsg && <p className="small" style={{ marginTop: 8, color: "var(--gold)" }}>{importMsg}</p>}
             </div>
           </div>
         </div>
