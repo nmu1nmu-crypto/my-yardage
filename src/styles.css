@@ -240,7 +240,7 @@ body {
 
 .tabbar {
   flex-shrink: 0;
-  display: grid; grid-template-columns: repeat(4, 1fr);
+  display: grid; grid-template-columns: repeat(5, 1fr);
   background: var(--card-grad-2); border-top: 1px solid var(--card-border);
   padding: 8px 0 max(10px, env(safe-area-inset-bottom));
   position: relative; z-index: var(--z-sticky);
