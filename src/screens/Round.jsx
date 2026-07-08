@@ -23,6 +23,9 @@ import {
   nextHole,
   finishRound,
   roundStats,
+  matchStatus,
+  skins,
+  stableford,
 } from "../lib/store.js";
 import { buildMailto, formatRoundText } from "../lib/scorecardEmail.js";
 import { distanceUnit, windUnit, convertDistance, distanceLabel } from "../lib/units.js";
@@ -41,7 +44,7 @@ const GREEN_STEPS = [
 // long par 5 approach.
 const MAX_GREEN_RANGE_YARDS = 700;
 
-export default function Round({ state, update, goGames }) {
+export default function Round({ state, update }) {
   const round = state.activeRound;
   const dUnit = distanceUnit(state);
   const wUnit = windUnit(state);
@@ -207,6 +210,9 @@ export default function Round({ state, update, goGames }) {
   const avg = selected ? clubAverage(selected) : null;
   const nextGreenStep = GREEN_STEPS.find((s) => !green[s.key]);
   const recommendedAvg = recommended ? clubAverage(recommended) : null;
+  const [you, opponent] = round.players;
+  const match = matchStatus(round);
+  const roundSkins = skins(round);
 
   async function refreshPosition() {
     try {
@@ -424,11 +430,73 @@ export default function Round({ state, update, goGames }) {
         onScoreChange={(holeNumber, player, strokes, par) => update(setScoreForHole, holeNumber, player, strokes, par)}
       />
 
-      <div className="row" style={{ marginTop: 12, gap: 8 }}>
-        <button className="btn ghost" style={{ flex: 1 }} onClick={goGames}>
-          🪙 Games
-        </button>
-      </div>
+      {opponent && (
+        <div className="card gold">
+          <div className="row">
+            <strong style={{ fontSize: 13, color: "var(--gold)" }}>
+              ⚔ Match play vs {opponent}
+            </strong>
+            <span className="pill gold">
+              {match === 0 ? "All square" : match > 0 ? `You're ${match} up` : `${match * -1} down`}
+            </span>
+          </div>
+          <div style={{ display: "flex", gap: 4, marginTop: 10 }}>
+            {[...round.holes]
+              .sort((a, b) => a.number - b.number)
+              .map((h) => {
+                const a = h.strokes[you];
+                const b = h.strokes[opponent];
+                if (a == null || b == null) return null;
+                const r = a < b ? "W" : b < a ? "L" : "½";
+                const bg = r === "W" ? "var(--gold)" : r === "L" ? "rgba(217,119,87,0.3)" : "rgba(245,241,230,0.1)";
+                const fg = r === "W" ? "var(--gold-ink)" : r === "L" ? "var(--coral)" : "var(--muted-55)";
+                return (
+                  <div key={h.number} style={{ flex: 1, textAlign: "center" }}>
+                    <div style={{ height: 26, borderRadius: 6, background: bg, color: fg, fontSize: 12, fontWeight: 700, display: "grid", placeItems: "center" }}>
+                      {r}
+                    </div>
+                    <div className="small" style={{ color: "var(--gold)", marginTop: 2 }}>{h.number}</div>
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+      )}
+
+      {round.players.length >= 2 && (
+        <div className="card gold">
+          <div className="row">
+            <strong style={{ fontSize: 13, color: "var(--gold)" }}>🪙 Skins · £1 a hole</strong>
+            {roundSkins.carrying > 0 && <span className="pill gold num">£{roundSkins.carrying} carries</span>}
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            {round.players.map((p) => (
+              <span key={p} style={{ fontSize: 13, color: "var(--gold)" }}>
+                {p} <strong className="num">£{roundSkins.won[p]}</strong>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {round.players.length >= 2 && (
+        <div className="card">
+          <div className="row">
+            <strong style={{ fontSize: 13 }}>📊 Stableford (gross)</strong>
+            <span className="muted small">2 pts per par</span>
+          </div>
+          <div className="row" style={{ marginTop: 10 }}>
+            {round.players.map((p) => (
+              <div key={p}>
+                <p className="num" style={{ fontSize: 20, fontWeight: 700, margin: 0, color: "var(--gold)" }}>
+                  {stableford(round, p)} pts
+                </p>
+                <p className="muted small" style={{ margin: 0 }}>{p}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {round.currentHole >= 2 && (
         <button

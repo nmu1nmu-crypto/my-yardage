@@ -3,14 +3,12 @@ import * as store from "./lib/store.js";
 import { nextHeroImage } from "./lib/heroRotation.js";
 import Home from "./screens/Home.jsx";
 import Round from "./screens/Round.jsx";
-import Games from "./screens/Games.jsx";
 import Scorecard from "./screens/Scorecard.jsx";
 import Bag from "./screens/Bag.jsx";
 
 const TABS = [
   { id: "home", label: "Home", glyph: "⛳" },
   { id: "round", label: "Round", glyph: "🎯" },
-  { id: "games", label: "Games", glyph: "🪙" },
   { id: "scorecard", label: "Card", glyph: "📋" },
   { id: "bag", label: "Bag", glyph: "🏌️" },
 ];
@@ -56,8 +54,7 @@ export default function App() {
         }}
       />
     ),
-    round: <Round state={state} update={update} goGames={() => setTab("games")} />,
-    games: <Games state={state} />,
+    round: <Round state={state} update={update} />,
     scorecard: <Scorecard state={state} update={update} />,
     bag: <Bag state={state} update={update} />,
   };

@@ -117,7 +117,7 @@ export function setProfile(state, updates) {
   const units = { ...state.profile?.units, ...updates.units };
 
   // A round already in progress freezes the golfer's name at every hole's
-  // strokes and the handicap map — rename those too, or the Scorecard/Games
+  // strokes and the handicap map — rename those too, or the Scorecard/Round
   // screens keep showing the old name for the rest of that round. Finished
   // rounds are left untouched; they're a record of who played, as it was.
   let activeRound = state.activeRound;
