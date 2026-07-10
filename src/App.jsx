@@ -1,46 +1,31 @@
+```jsx
 import { useEffect, useState } from "react";
-import * as store from "./lib/store.js";
+import  as store from "./lib/store.js";
 import { nextHeroImage } from "./lib/heroRotation.js";
 import Home from "./screens/Home.jsx";
 import Round from "./screens/Round.jsx";
 import Games from "./screens/Games.jsx";
 import Scorecard from "./screens/Scorecard.jsx";
 import Bag from "./screens/Bag.jsx";
+import HoleMap from "./components/HoleMap.jsx";
 
 const TABS = [
-  { id: "home", label: "Home", glyph: "⛳" },
+  { id: "home", label: "Home", glyph: "" },
   { id: "round", label: "Round", glyph: "🎯" },
   { id: "games", label: "Games", glyph: "🪙" },
   { id: "scorecard", label: "Card", glyph: "📋" },
   { id: "bag", label: "Bag", glyph: "🏌️" },
 ];
 
-// Elements that legitimately scroll — everything else is the fixed app
-// shell and must never move under a touch drag.
-const SCROLLABLE_SELECTOR = ".screen, .picker-body, .course-sheet, .hscroll";
-
 export default function App() {
   const [state, setState] = useState(store.load);
   const [tab, setTab] = useState("home");
   const [hero] = useState(nextHeroImage);
 
-  useEffect(() => store.save(state), [state]);
+  // NEW — when mapMode is "on", the full-screen HoleMap takes over
+  const [mapMode, setMapMode] = useState(false);
 
-  useEffect(() => {
-    // CSS overflow:hidden alone doesn't stop iOS Safari/WKWebView's
-    // touch-drag rubber-band effect — it only governs programmatic/wheel
-    // scrolling. The only reliable fix is intercepting the touch itself:
-    // block the drag unless it started inside a container that's meant to
-    // scroll, so the fixed shell (tabbar included) truly can't be dragged
-    // off-screen while .screen/.picker-body/etc keep scrolling normally.
-    function blockOuterDrag(e) {
-      if (!e.target.closest(SCROLLABLE_SELECTOR)) {
-        e.preventDefault();
-      }
-    }
-    document.addEventListener("touchmove", blockOuterDrag, { passive: false });
-    return () => document.removeEventListener("touchmove", blockOuterDrag);
-  }, []);
+  useEffect(() => store.save(state), [state]);
 
   const update = (fn, ...args) => setState((s) => fn(s, ...args));
 
@@ -50,13 +35,14 @@ export default function App() {
         state={state}
         hero={hero}
         update={update}
+        onOpenMap={() => setMapMode(true)}
         onStartRound={(opts) => {
           update(store.startRound, opts);
           setTab("round");
         }}
       />
     ),
-    round: <Round state={state} update={update} goGames={() => setTab("games")} />,
+    round: <Round state={state} update={update} goGames={() => setTab("games")} onOpenMap={() => setMapMode(true)} />,
     games: <Games state={state} />,
     scorecard: <Scorecard state={state} update={update} />,
     bag: <Bag state={state} update={update} />,
@@ -65,6 +51,16 @@ export default function App() {
   return (
     <>
       <main className="screen">{screens[tab]}</main>
+
+      {/ Full-screen satellite drill-in overlays everything /}
+      {mapMode && (
+        <HoleMap
+          courseCache={state.courseCache}
+          courseId={state.profile?.currentCourse?.id}
+          onBack={() => setMapMode(false)}
+        />
+      )}
+
       <nav className="tabbar" aria-label="Main">
         {TABS.map((t) => (
           <button
@@ -81,3 +77,18 @@ export default function App() {
     </>
   );
 }
+```
+
+Scroll to the bottom and click the green "Commit changes" button.
+
+---
+
+Step 3 — Done! Build ships automatically
+
+Once both files are committed, GitHub Actions triggers automatically (your workflow from earlier). In 3 minutes you'll see it succeed, and the new build uploads to TestFlight.
+
+You can watch it here (open Safari):
+
+```
+https://github.com/nmu1nmu-crypto/my-yardage/actions
+```
