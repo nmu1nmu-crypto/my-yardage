@@ -144,7 +144,7 @@ export default function Home({ state, hero, update, onStartRound }) {
 
 // UK courses missing from OpenGolfAPI but mapped in OSM. Pinned to top of nearby picker.
 const UK_FAVORITES = [
-  { id: "woolston-manor", name: "Woolston Manor Golf & Country Club", city: "Warrington", state: "UK", lat: 53.40918, lng: -2.52536 },
+  { id: "woolston-manor", name: "Woolston Manor Golf & Country Club", city: "Warrington", state: "UK", lat: 53.4080, lng: -2.5460 },
 ];
 
   async function openCoursePicker() {
