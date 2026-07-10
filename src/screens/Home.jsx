@@ -213,9 +213,10 @@ export default function Home({ state, hero, update, onStartRound }) {
       fairways = geometry.fairways;
       teeBoxes = geometry.teeBoxes;
       hazards = geometry.hazards;
-      update(cacheCourseData, c.id, { holes, tees, greens, fairways, teeBoxes, hazards, lat, lng });
+      update(cacheCourseData, c.id, { name: c.name, holes, tees, greens, fairways, teeBoxes, hazards, lat, lng, city: c.city ?? null, state: c.state ?? null });
     }
 
+    update(setCurrentCourse, { id: c.id, name: c.name, city: c.city ?? null, state: c.state ?? null });
     setSelectedCourse({
       id: c.id,
       name: c.name,
