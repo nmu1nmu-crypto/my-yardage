@@ -587,3 +587,20 @@ export function calculatedHandicapIndex(rounds, player) {
   const avg = used.reduce((a, b) => a + b, 0) / used.length;
   return { index: Math.round((avg + entry.adj) * 10) / 10, roundsUsed: diffs.length };
 }
+
+
+/* ---- Option C: user-tapped green polygons ----
+ * Shape: { courseId: [{lat,lon}, ...] }.
+ * Same shape as OSM greens, so HoleMap draws them with no extra code. */
+
+export function setUserGreen(state, courseId, points) {
+  const polygons = { ...(state.userGreenPolygons || {}) };
+  polygons[courseId] = points;
+  return { ...state, userGreenPolygons: polygons };
+}
+
+export function clearUserGreen(state, courseId) {
+  const polygons = { ...(state.userGreenPolygons || {}) };
+  delete polygons[courseId];
+  return { ...state, userGreenPolygons: polygons };
+}
