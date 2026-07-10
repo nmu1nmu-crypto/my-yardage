@@ -62,7 +62,13 @@ function blank() {
     rounds: [],
     activeRound: null,
     golfers: {},
-    profile: { name: "You", units: { distance: "yards", wind: "mph" }, currentCourse: null, avatar: null },
+    profile: { 
+      name: "You", 
+      units: { distance: "yards", wind: "mph" }, 
+      currentCourse: null, 
+      avatar: null,
+      user: { name: "Alex", handicap: 14.2, avgScore: 88.4, lastRoundScore: 85, units: "yards", emailOptIn: true }
+    },
     recentCourses: [],
     favoriteCourses: [],
     // Full holes/tees/greens/hazards/elevation per course, keyed by course
