@@ -70,6 +70,11 @@ function blank() {
     // at the same place. Persists the same way as everything else in this
     // file (see the localStorage-durability caveat on load()/save()).
     courseCache: {},
+  additionalPlayers: [
+    { id: 'p2', name: 'Mike Chen',   handicap: 9.4 },
+    { id: 'p3', name: 'Sarah Patel', handicap: 18.1 },
+    { id: 'p4', name: 'James Wu',    handicap: 6.8 },
+  ],
   };
 }
 

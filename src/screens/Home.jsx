@@ -152,13 +152,20 @@ export default function Home({ state, update, onOpenTab }) {
       <div style={{ padding: "20px 20px 0" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
           <div style={{ color: "#F5F1E6", fontWeight: 700, fontSize: 16 }}>Players</div>
-          <div style={{ color: "rgba(245,241,230,0.5)", fontSize: 12, fontWeight: 600 }}>1 of 1 added</div>
+          <div style={{ color: "rgba(245,241,230,0.5)", fontSize: 12, fontWeight: 600 }}>3 of 3 added</div>
         </div>
-        <PlayerRow
-          name={player.name || "You"}
-          handicap={player.handicap}
-          initials={(player.name || "Y")[0].toUpperCase()}
-        />
+        {(state.additionalPlayers || [
+          { id: 'p2', name: 'Mike Chen',   handicap: 9.4  },
+          { id: 'p3', name: 'Sarah Patel', handicap: 18.1 },
+          { id: 'p4', name: 'James Wu',    handicap: 6.8  },
+        ]).map((p, idx) => (
+          <PlayerRow
+            key={p.id || idx}
+            name={p.name}
+            handicap={p.handicap}
+            initials={p.name[0].toUpperCase()}
+          />
+        ))}
       </div>
 
       {/* START ROUND CTA */}
