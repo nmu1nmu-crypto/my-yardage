@@ -1,93 +1,52 @@
-import { useState } from "react";
-import { setScoreForHole } from "../lib/store.js";
-import { ATTRIBUTION } from "../lib/courseApi.js";
-import ScoreGrid from "../components/ScoreGrid.jsx";
-import LogoMark from "../components/LogoMark.jsx";
-
-function toParLabel(n) {
-  if (n == null) return "–";
-  if (n === 0) return "E";
-  return n > 0 ? `+${n}` : `${n}`;
-}
-
-function roundCardStats(round, you) {
-  const holeByNum = Object.fromEntries(round.holes.map((h) => [h.number, h]));
-  const allHoles = Array.from({ length: 18 }, (_, i) => i + 1);
-  const strokesFor = (n) => holeByNum[n]?.strokes?.[you] ?? null;
-  const parFor = (n) => holeByNum[n]?.par ?? null;
-  const played = allHoles.filter((n) => strokesFor(n) != null);
-  if (!played.length) return { score: null, toPar: null };
-  const score = played.reduce((s, n) => s + strokesFor(n), 0);
-  const parPlayed = played.map(parFor).filter((p) => p != null);
-  const toPar = parPlayed.length === played.length ? score - parPlayed.reduce((a, b) => a + b, 0) : null;
-  return { score, toPar };
-}
-
 export default function Scorecard({ state, update }) {
-  const [expandedId, setExpandedId] = useState(null);
-
-  const rounds = state.activeRound ? [state.activeRound, ...state.rounds] : state.rounds;
-
-  if (!rounds.length) {
-    return (
-      <div className="card" style={{ marginTop: 24 }}>
-        <strong>No scorecard yet</strong>
-        <p className="muted">Start a round to see the full 18-hole card here.</p>
-      </div>
-    );
-  }
-
+  const history = state.recentRounds || [];
   return (
-    <>
-      <div className="row" style={{ margin: "8px 0 4px" }}>
-        <LogoMark size={36} />
-        <div style={{ textAlign: "center", flex: 1 }}>
-          <strong style={{ fontSize: 17 }}>Scorecard</strong>
-          <p className="muted small" style={{ margin: 0 }}>{state.rounds.length} rounds played</p>
-        </div>
-        <div style={{ width: 36 }} />
-      </div>
-
-      {rounds.map((round) => {
-        const isCurrent = state.activeRound && round.id === state.activeRound.id;
-        const you = round.players[0];
-        const { score, toPar } = roundCardStats(round, you);
-        const isOpen = expandedId === round.id;
-        return (
-          <div key={round.id} className={`round-card ${isOpen ? "open" : ""}`}>
-            <button className="round-summary" onClick={() => setExpandedId(isOpen ? null : round.id)}>
-              <div>
-                <p className="round-summary-date">{isCurrent ? "In progress" : new Date(round.startedAt).toLocaleDateString()}</p>
-                <p className="round-summary-course">{round.course}</p>
-                {round.handicaps?.[you]?.courseHandicap != null && (
-                  <p className="round-summary-hcp">HCP {round.handicaps[you].courseHandicap}</p>
-                )}
-              </div>
-              <div>
-                <p className="round-summary-score">{score ?? "–"}</p>
-                <p className="round-summary-topar">{toParLabel(toPar)}</p>
-              </div>
-            </button>
-            <svg className="round-chevron" viewBox="0 0 20 20" fill="none">
-              <path d="M5 7.5L10 12.5L15 7.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-            {isOpen && (
-              <div style={{ padding: "0 12px 14px" }}>
-                <ScoreGrid
-                  round={round}
-                  mode="both"
-                  editable={isCurrent}
-                  onScoreChange={(holeNumber, player, strokes, par) => update(setScoreForHole, holeNumber, player, strokes, par)}
-                />
-              </div>
-            )}
+    <div style={{ minHeight: "100vh", paddingBottom: 60 }}>
+      <div style={{ padding: "66px 20px 16px", borderBottom: "1px solid rgba(201,169,78,0.15)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ width: 36 }} />
+          <div style={{ textAlign: "center" }}>
+            <div style={{ color: "#F5F1E6", fontSize: 17, fontWeight: 800 }}>Scorecard</div>
+            <div style={{ color: "rgba(245,241,230,0.55)", fontSize: 12, fontWeight: 600 }}>
+              {history.length} rounds played
+            </div>
           </div>
-        );
-      })}
-
-      <p className="small" style={{ opacity: 0.5, marginTop: 12 }}>
-        {rounds.some((r) => r.courseId) ? ATTRIBUTION : "Par entered as each hole is played — link a course from Home for full yardage and stroke index."}
-      </p>
-    </>
+          <div style={{ width: 36 }} />
+        </div>
+      </div>
+      <div style={{ padding: "30px 20px", textAlign: "center" }}>
+        {history.length === 0 ? (
+          <>
+            <div style={{ color: "rgba(245,241,230,0.7)", fontSize: 14, marginBottom: 8 }}>
+              No rounds yet.
+            </div>
+            <div style={{ color: "rgba(245,241,230,0.55)", fontSize: 13 }}>
+              Complete a round on the Game tab to see it here.
+            </div>
+          </>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {history.map((r, i) => {
+              const date = r.date ? new Date(r.date).toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
+              return (
+                <div key={i} style={{ background: "linear-gradient(160deg, #1B3B26, #12281B)",
+                  border: "1px solid rgba(201,169,78,0.2)", borderRadius: 16, padding: 14,
+                  display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ color: "rgba(245,241,230,0.55)", fontSize: 11, fontWeight: 600 }}>{date}</div>
+                    <div style={{ color: "#F5F1E6", fontSize: 15, fontWeight: 700 }}>{r.course || "Course"}</div>
+                    <div style={{ color: "rgba(245,241,230,0.55)", fontSize: 11, fontWeight: 600 }}>HCP {r.handicap ?? "—"}</div>
+                  </div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ color: "#C9A94E", fontSize: 30, fontWeight: 800 }}>{r.totalScore ?? "—"}</div>
+                    <div style={{ color: "rgba(245,241,230,0.55)", fontSize: 12, fontWeight: 600 }}>{r.toPar ?? "—"}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

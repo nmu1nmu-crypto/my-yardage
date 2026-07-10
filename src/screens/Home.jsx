@@ -1,174 +1,53 @@
-import { useRef, useState } from "react";
-import { clubAverage, roundStats, calculatedHandicapIndex, setProfile, setHandicapIndex, removeGolfer, exportData, importData, replaceState, setAvatar, setCurrentCourse, toggleFavoriteCourse, cacheCourseData } from "../lib/store.js";
+import { useState } from "react";
 import { currentPosition } from "../lib/geo.js";
-import { searchCourses, fetchCourseHoles, fetchCourseTees, ATTRIBUTION } from "../lib/courseApi.js";
+import { searchCourses, fetchCourseHoles, fetchCourseTees } from "../lib/courseApi.js";
 import { fetchCourseGeometry } from "../lib/greenApi.js";
-import { buildMailto, formatAllRoundsText } from "../lib/scorecardEmail.js";
-import { distanceUnit, convertDistance, distanceLabel } from "../lib/units.js";
-import Gauge from "../components/Gauge.jsx";
+import { setProfile, setCurrentCourse, cacheCourseData, setUserGreen, clearUserGreen, setHandicapIndex, removeGolfer } from "../lib/store.js";
 
-const MAX_EXTRA_PLAYERS = 3;
-const AVG_WINDOWS = [
-  { label: "5", n: 5 },
-  { label: "10", n: 10 },
-  { label: "20", n: 20 },
-  { label: "All", n: null },
-];
-
-function initial(name) {
-  return (name || "?").trim().charAt(0).toUpperCase() || "?";
-}
-
-export default function Home({ state, hero, update, onStartRound }) {
-  const profileName = state.profile?.name || "You";
-  const dUnit = distanceUnit(state);
-  const [extraPlayers, setExtraPlayers] = useState([]); // names of players 2..4
-  const [pickerOpenIdx, setPickerOpenIdx] = useState(null);
-  const [selectedCourse, setSelectedCourse] = useState(null); // { id, name, holes, tees }
-  const [selectedTee, setSelectedTee] = useState(null); // { key, name, color, gender, rating, slope }
-  const [avgWindow, setAvgWindow] = useState(null); // null = all rounds
-  const [managingPlayers, setManagingPlayers] = useState(false);
-
-  const [pickingCourse, setPickingCourse] = useState(false);
-  const [nearby, setNearby] = useState([]);
-  const [nearbyBusy, setNearbyBusy] = useState(false);
-  const [nearbyMsg, setNearbyMsg] = useState("");
-  const [loadingCourse, setLoadingCourse] = useState(false);
-  const [pickerTab, setPickerTab] = useState("nearby"); // "nearby" | "recent" | "favourites"
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState([]);
-  const [searchBusy, setSearchBusy] = useState(false);
-  const searchTimer = useRef(null);
-
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [nameDraft, setNameDraft] = useState(profileName);
-  const [emailDraft, setEmailDraft] = useState(state.profile?.email || "");
-  const [distanceUnitDraft, setDistanceUnitDraft] = useState(state.profile?.units?.distance || "yards");
-  const [windUnitDraft, setWindUnitDraft] = useState(state.profile?.units?.wind || "mph");
-  const [handicapDraft, setHandicapDraft] = useState(state.golfers?.[profileName]?.handicapIndex ?? "");
-  const [importMsg, setImportMsg] = useState("");
-  const fileInputRef = useRef(null);
-  const avatarInputRef = useRef(null);
-
-  const recent = state.rounds.slice(0, 4);
-
-  const avgScore = (() => {
-    const windowed = avgWindow ? state.rounds.slice(0, avgWindow) : state.rounds;
-    const full = windowed
-      .map(roundStats)
-      .filter((s) => s.holesPlayed >= 9);
-    if (!full.length) return "—";
-    return (
-      full.reduce((s, r) => s + (r.strokes / r.holesPlayed) * 18, 0) /
-      full.length
-    ).toFixed(1);
-  })();
-  const lastRoundScore = (() => {
-    const last = state.rounds.find((r) => roundStats(r).holesPlayed >= 9);
-    return last ? roundStats(last).strokes : null;
-  })();
-
-  const handicapCalc = calculatedHandicapIndex(state.rounds, profileName);
-  const badgeHandicap = handicapCalc?.index ?? state.golfers?.[profileName]?.handicapIndex ?? null;
-  const currentCourse = state.profile?.currentCourse || null;
-
-  const playerNames = [profileName, ...extraPlayers.map((p) => p.trim()).filter(Boolean)].slice(0, 1 + MAX_EXTRA_PLAYERS);
-  const knownPlayers = Object.keys(state.golfers || {})
-    .filter((n) => n !== profileName && !extraPlayers.includes(n))
-    .sort();
-
-  function updateExtra(i, value) {
-    setExtraPlayers((boxes) => boxes.map((b, idx) => (idx === i ? value : b)));
-    setPickerOpenIdx(null);
-  }
-
-  function addExtra() {
-    setExtraPlayers((boxes) => (boxes.length < MAX_EXTRA_PLAYERS ? [...boxes, ""] : boxes));
-  }
-
-  function removeExtra(i) {
-    setExtraPlayers((boxes) => boxes.filter((_, idx) => idx !== i));
-  }
-
-  function saveProfile() {
-    const trimmed = nameDraft.trim();
-    const finalName = trimmed || profileName;
-    update(setProfile, {
-      name: finalName,
-      email: emailDraft.trim(),
-      units: { distance: distanceUnitDraft, wind: windUnitDraft },
-    });
-    if (!handicapCalc) {
-      const parsed = parseFloat(handicapDraft);
-      update(setHandicapIndex, finalName, Number.isNaN(parsed) ? null : parsed);
-    }
-    setProfileOpen(false);
-  }
-
-  function emailAllScorecards() {
-    window.location.href = buildMailto({
-      to: state.profile?.email || "",
-      subject: "My Yardage — all scorecards",
-      body: formatAllRoundsText(state.rounds, profileName),
-    });
-  }
-
-  function doExport() {
-    const blob = new Blob([exportData(state)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `my-yardage-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function onImportFile(e) {
-    const file = e.target.files?.[0];
-    e.target.value = ""; // allow picking the same file again later
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const imported = importData(reader.result);
-        update(replaceState, imported);
-        setImportMsg("Backup restored.");
-      } catch (err) {
-        setImportMsg(err.message || "Couldn't read that file.");
-      }
-    };
-    reader.readAsText(file);
-  }
-
-
-// UK courses missing from OpenGolfAPI but mapped in OSM. Pinned to top of nearby picker.
 const UK_FAVORITES = [
   { id: "woolston-manor", name: "Woolston Manor Golf & Country Club", city: "Warrington", state: "UK", lat: 53.4080, lng: -2.5460 },
 ];
 
-  async function openCoursePicker() {
-    setSelectedCourse(null);
-    setSelectedTee(null);
-    setNearby([]);
-    setNearbyMsg("");
+export default function Home({ state, update, onOpenTab }) {
+  const [showProfile, setShowProfile] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const [nearby, setNearby] = useState([]);
+  const [nearbyBusy, setNearbyBusy] = useState(false);
+  const [nearbyMsg, setNearbyMsg] = useState("");
+  const [query, setQuery] = useState("");
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [loadingCourse, setLoadingCourse] = useState(false);
+  const [pickerTab, setPickerTab] = useState("nearby");
+
+  const profile = state.profile || {};
+  const player = profile.user || { name: "You", handicap: 14 };
+  const course = profile.currentCourse;
+
+  const greeting = () => {
+    const h = new Date().getHours();
+    if (h < 12) return "Good morning";
+    if (h < 18) return "Good afternoon";
+    return "Good evening";
+  };
+
+  const startRound = async () => {
+    if (!course) { openCoursePicker(); return; }
+    update(setCurrentCourse, course);
+    onOpenTab("game");
+  };
+
+  const openCoursePicker = async () => {
+    setPicking(true);
     setPickerTab("nearby");
-    setSearchOpen(false);
-    setSearchQuery("");
-    setSearchResults([]);
-    setPickingCourse(true);
+    setNearby([]);
     setNearbyBusy(true);
     try {
       const pos = await currentPosition();
-      // Widen the radius until we've got a real list to choose from — a tight
-      // 25mi radius can come back thin in less golf-dense areas, and "nearby"
-      // shouldn't mean "the three closest" if there are more within reach.
       let courses = [];
-      for (const radiusMi of [25, 50, 100]) {
-        courses = await searchCourses({ lat: pos.lat, lng: pos.lon, radiusMi, limit: 50 });
+      for (const mi of [25, 50, 100]) {
+        courses = await searchCourses({ lat: pos.lat, lng: pos.lon, radiusMi: mi, limit: 50 });
         if (courses.length >= 20) break;
       }
-      // Sort by actual distance from user GPS, not API database-ID order
       const toRad = (d) => (d * Math.PI) / 180;
       const R = 3958.8;
       const uLat = toRad(pos.lat), uLon = toRad(pos.lon);
@@ -179,639 +58,374 @@ const UK_FAVORITES = [
         const dB = Math.sin((bLat-uLat)/2)**2 + Math.cos(uLat)*Math.cos(bLat)*Math.sin((bLon-uLon)/2)**2;
         return 2*R*Math.asin(Math.sqrt(dA)) - 2*R*Math.asin(Math.sqrt(dB));
       });
-      // UK favorites always surfaced at the top (e.g. Woolston Manor even if not in API)
       const favIds = new Set(UK_FAVORITES.map((f) => f.id));
       const merged = [...UK_FAVORITES, ...courses.filter((c) => !favIds.has(c.id))];
       setNearby(merged);
-      if (!courses.length) setNearbyMsg("No courses found nearby");
-      if (!courses.length) setNearbyMsg("No courses found nearby — you can still start without one.");
+      if (!courses.length) setNearbyMsg("No courses near you. Try searching or pick from UK favourites.");
     } catch {
-      setNearbyMsg("Couldn't read GPS — check location permission, or start without a course.");
+      setNearbyMsg("Couldn't read GPS. Try searching instead.");
     }
     setNearbyBusy(false);
-  }
+  };
 
-  function onSearchChange(value) {
-    setSearchQuery(value);
-    clearTimeout(searchTimer.current);
-    if (!value.trim()) {
-      setSearchResults([]);
-      setSearchBusy(false);
-      return;
-    }
-    setSearchBusy(true);
-    searchTimer.current = setTimeout(async () => {
-      const courses = await searchCourses({ q: value.trim() });
-      setSearchResults(courses);
-      setSearchBusy(false);
-    }, 400);
-  }
-
-  async function pickCourse(c) {
+  const pickCourse = async (c) => {
     setLoadingCourse(true);
     const lat = c.lat ?? c.latitude ?? null;
     const lng = c.lng ?? c.longitude ?? null;
-
-    // A course already played once (this round or any past one) is never
-    // re-fetched — holes/tees/greens/hazards/elevation are cached forever
-    // by course id. Green/hazard/elevation geometry is fetched here, once,
-    // alongside holes/tees — never from the Round screen, so playing a
-    // round makes no network calls for any of it (and the shared Overpass
-    // server can't be hammered by repeated visits to the same course).
     const cached = state.courseCache?.[c.id];
     let holes, tees, greens, fairways, teeBoxes, hazards;
     if (cached) {
       ({ holes, tees, greens, fairways, teeBoxes, hazards } = cached);
     } else {
-      const [h, t, geometry] = await Promise.all([
-        fetchCourseHoles(c.id),
-        fetchCourseTees(c.id),
-        fetchCourseGeometry({ lat, lng }),
-      ]);
-      holes = h;
-      tees = t;
-      greens = geometry.greens;
-      fairways = geometry.fairways;
-      teeBoxes = geometry.teeBoxes;
-      hazards = geometry.hazards;
-      update(cacheCourseData, c.id, { name: c.name, holes, tees, greens, fairways, teeBoxes, hazards, lat, lng, city: c.city ?? null, state: c.state ?? null });
+      try {
+        const [h, t, geometry] = await Promise.all([
+          fetchCourseHoles(c.id),
+          fetchCourseTees(c.id),
+          fetchCourseGeometry({ lat, lng }),
+        ]);
+        holes = h; tees = t;
+        greens = geometry.greens; fairways = geometry.fairways;
+        teeBoxes = geometry.teeBoxes; hazards = geometry.hazards;
+        update(cacheCourseData, c.id, { holes, tees, greens, fairways, teeBoxes, hazards, lat, lng });
+      } catch {
+        holes = []; tees = []; greens = []; fairways = []; teeBoxes = []; hazards = [];
+      }
     }
-
-    update(setCurrentCourse, { id: c.id, name: c.name, city: c.city ?? null, state: c.state ?? null });
-    setSelectedCourse({
-      id: c.id,
-      name: c.name,
-      holes: holes.length ? holes : null,
-      tees,
-      lat,
-      lng,
-      greens,
-      fairways,
-      teeBoxes,
-      hazards,
-    });
-    const withRatings = tees.filter((t) => t.rating != null && t.slope != null);
-    setSelectedTee(withRatings.length ? withRatings[0] : null);
+    const fullCourse = { id: c.id, name: c.name, city: c.city, state: c.state, lat, lng, holes, tees, greens, fairways, teeBoxes, hazards };
+    update(setCurrentCourse, fullCourse);
+    update(setProfile, "currentCourseId", c.id);
     setLoadingCourse(false);
-    update(setCurrentCourse, { id: c.id, name: c.name, city: c.city, state: c.state, lat, lng });
+    setPicking(false);
+  };
+
+  const updatePlayer = (field, value) => {
+    update(setProfile, "user", { ...(profile.user || {}), [field]: value });
+  };
+
+  if (showProfile) {
+    return <ProfileModal user={player} onUpdate={updatePlayer} onSave={() => setShowProfile(false)} />;
   }
 
-  function courseRow(c) {
-    const isFav = state.favoriteCourses.some((f) => f.id === c.id);
-    const lat = c.lat ?? c.latitude ?? null;
-    const lng = c.lng ?? c.longitude ?? null;
-    return (
-      <div key={c.id} className="list-row row course-row">
-        <button
-          className="course-row-main"
-          onClick={() => pickCourse(c)}
-        >
-          <div style={{ fontSize: 14 }}>{c.name}</div>
-          <div className="muted small">
-            {[c.city, c.state].filter(Boolean).join(", ") || " "}
-          </div>
-        </button>
-        <div className="row" style={{ gap: 8, width: "auto", flexShrink: 0 }}>
-          {c.distance_mi != null && (
-            <span className="small num" style={{ color: "var(--gold)" }}>
-              {c.distance_mi.toFixed(1)} mi
-            </span>
-          )}
-          <button
-            className="star-btn"
-            aria-label={isFav ? "Remove from favourites" : "Add to favourites"}
-            onClick={() => update(toggleFavoriteCourse, { id: c.id, name: c.name, city: c.city, state: c.state, lat, lng })}
-          >
-            {isFav ? "★" : "☆"}
-          </button>
-        </div>
-      </div>
-    );
+  if (picking) {
+    return <CoursePicker tab={pickerTab} setTab={setPickerTab}
+      nearby={nearby} nearbyBusy={nearbyBusy} nearbyMsg={nearbyMsg}
+      query={query} setQuery={setQuery} searchBusy={searchBusy}
+      searchResults={[]} onSelect={(c) => pickCourse(c)}
+      onClose={() => setPicking(false)} loadingCourse={loadingCourse} />;
   }
 
-  function onAvatarFile(e) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => update(setAvatar, reader.result);
-    reader.readAsDataURL(file);
-  }
-
-  function openProfile() {
-    setNameDraft(profileName);
-    setEmailDraft(state.profile?.email || "");
-    setDistanceUnitDraft(state.profile?.units?.distance || "yards");
-    setWindUnitDraft(state.profile?.units?.wind || "mph");
-    setHandicapDraft(state.golfers?.[profileName]?.handicapIndex ?? "");
-    setImportMsg("");
-    setProfileOpen(true);
-  }
-
-  function start(course) {
-    const handicapIndexes = Object.fromEntries(
-      playerNames
-        .map((p) => [p, parseFloat(state.golfers?.[p]?.handicapIndex ?? "")])
-        .filter(([, v]) => !Number.isNaN(v))
-    );
-    onStartRound({
-      players: playerNames,
-      course: course?.name || "New round",
-      courseId: course?.id ?? null,
-      courseLat: course?.lat ?? null,
-      courseLng: course?.lng ?? null,
-      courseHoles: course?.holes ?? null,
-      courseGreens: course?.greens ?? [],
-      courseFairways: course?.fairways ?? [],
-      courseTeeBoxes: course?.teeBoxes ?? [],
-      courseHazards: course?.hazards ?? [],
-      handicapIndexes,
-      teeRatingSlope: selectedTee ? { rating: selectedTee.rating, slope: selectedTee.slope } : null,
-    });
-    setPickingCourse(false);
-  }
+  const lastRound = state.recentRounds?.[0]?.totalScore ?? null;
+  const avgScore = state.profile?.user?.avgScore ?? null;
 
   return (
-    <>
-      <header
-        className="hero hero--photo"
-        style={
-          hero && {
-            backgroundImage: `url(${hero.src})`,
-          }
-        }
-      >
-        <div className="row" style={{ alignItems: "flex-start" }}>
+    <div style={{ minHeight: "100vh", paddingBottom: 60 }}>
+      {/* Hero */}
+      <div style={{ position: "relative", height: 280,
+        background: "linear-gradient(180deg, #1B3B26 0%, #0F2419 100%)",
+        overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 54,
+          background: "#0F2419" }} />
+        <div style={{ position: "absolute", top: 66, left: 20, right: 20, zIndex: 2 }}>
+          <div style={{ fontSize: 13, color: "rgba(245,241,230,0.85)", marginBottom: 4 }}>
+            {greeting()}, {player.name || "Golfer"}
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: "#fff",
+            textShadow: "0 2px 8px rgba(0,0,0,0.5)" }}>
+            {course?.name || "No course selected"}
+          </div>
+        </div>
+        <button onClick={() => setShowProfile(true)}
+          style={{ position: "absolute", top: 66, right: 20, width: 40, height: 40,
+            borderRadius: "50%", border: "none", cursor: "pointer",
+            background: "rgba(255,255,255,0.2)", backdropFilter: "blur(8px)",
+            display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="8" r="4" stroke="#fff" strokeWidth="2"/>
+            <path d="M4 21v-1a6 6 0 0112 0v1" stroke="#fff" strokeWidth="2" strokeLinecap="round"/>
+          </svg>
+        </button>
+        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 60,
+          background: "linear-gradient(180deg, transparent, #0F2419)" }} />
+      </div>
+
+      {/* My card - overlaps hero */}
+      <div style={{ margin: "-28px 20px 0",
+        background: "linear-gradient(160deg, #1B3B26, #12281B)",
+        border: "1px solid rgba(201, 169, 78, 0.25)",
+        borderRadius: 20, padding: 16,
+        boxShadow: "0 10px 30px rgba(0,0,0,0.35)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div style={{ width: 52, height: 52, borderRadius: "50%", flexShrink: 0,
+            background: "linear-gradient(160deg, #DDBB63, #B8933B)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "#1B3B26", fontWeight: 700, fontSize: 18 }}>
+            {(player.name || "Y")[0].toUpperCase()}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ color: "#F5F1E6", fontWeight: 700, fontSize: 16 }}>
+              {player.name || "You"}
+            </div>
+            <div style={{ color: "rgba(245,241,230,0.55)", fontSize: 12, fontWeight: 600 }}>
+              Handicap Index
+            </div>
+          </div>
+          <div style={{ width: 58, height: 58, borderRadius: "50%", flexShrink: 0,
+            background: "conic-gradient(#C9A94E 0deg, #C9A94E " + (player.handicap || 0) * 10 + "deg, rgba(201,169,78,0.2) " + (player.handicap || 0) * 10 + "deg, rgba(201,169,78,0.2) 360deg)",
+            display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ width: 48, height: 48, borderRadius: "50%",
+              background: "#12281B", display: "flex", alignItems: "center",
+              justifyContent: "center", color: "#C9A94E", fontWeight: 800, fontSize: 14 }}>
+              {player.handicap ?? "—"}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 14 }}>
+          <StatTile label="Avg Score" value={avgScore ?? "—"} />
+          <StatTile label="Last Round" value={lastRound ?? "—"} />
+        </div>
+      </div>
+
+      {/* Start round */}
+      <div style={{ padding: "0 20px", marginTop: 18 }}>
+        <button onClick={startRound}
+          style={{ width: "100%", background: "linear-gradient(160deg, #DDBB63, #B8933B)",
+            border: "none", borderRadius: 999, padding: "16px 0",
+            color: "#1B3B26", fontWeight: 800, fontSize: 16, cursor: "pointer",
+            boxShadow: "0 8px 20px rgba(201,169,78,0.25)" }}>
+          {course ? "Start Round" : "Pick a Course"}
+        </button>
+      </div>
+
+      {/* Players */}
+      <div style={{ padding: "20px 20px 0" }}>
+        <div style={{ display: "flex", justifyContent: "space-between",
+          alignItems: "center", marginBottom: 10 }}>
+          <div style={{ color: "#F5F1E6", fontWeight: 700, fontSize: 16 }}>Players</div>
+          <div style={{ color: "rgba(245,241,230,0.5)", fontSize: 12, fontWeight: 600 }}>
+            1 added
+          </div>
+        </div>
+        <div style={{ background: "linear-gradient(160deg, #1B3B26, #12281B)",
+          border: "1px solid rgba(201, 169, 78, 0.2)", borderRadius: 16,
+          padding: 12, display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0,
+            background: "rgba(201,169,78,0.2)", color: "#C9A94E",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontWeight: 700, fontSize: 15 }}>
+            {(player.name || "Y")[0].toUpperCase()}
+          </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p className="hero-greeting">Good morning, {profileName}</p>
-          </div>
-          <button className="avatar-btn" onClick={openProfile} aria-label="Profile">
-            👤
-          </button>
-        </div>
-
-        <div className="hero-course">
-          {currentCourse ? (
-            <p className="hero-course-name">{currentCourse.name}</p>
-          ) : (
-            <p className="hero-course-name">No course selected yet</p>
-          )}
-          <button className="hero-change-btn" onClick={openCoursePicker}>
-            {currentCourse ? "Change course" : "Choose a course"}
-          </button>
-        </div>
-      </header>
-
-      <div className="card mycard">
-        <div className="row" style={{ alignItems: "center" }}>
-          <div className="row" style={{ gap: 12, width: "auto", flex: 1 }}>
-            <div className="mycard-avatar">
-              {state.profile?.avatar ? <img src={state.profile.avatar} alt="" /> : initial(profileName)}
+            <div style={{ color: "#F5F1E6", fontWeight: 700, fontSize: 14.5 }}>
+              {player.name || "You"}
             </div>
-            <div>
-              <p className="mycard-name">{profileName}</p>
-              <p className="mycard-sub">Handicap Index</p>
+            <div style={{ color: "rgba(245,241,230,0.55)", fontSize: 11, fontWeight: 600 }}>
+              HCP {player.handicap ?? "—"}
             </div>
           </div>
-          <Gauge value={badgeHandicap} />
         </div>
-        <div className="stat-tile-row">
-          <div className="stat-tile">
-            <p className="label">Avg score</p>
-            <p className="value num">{avgScore}</p>
-          </div>
-          <div className="stat-tile">
-            <p className="label">Last round</p>
-            <p className="value num">{lastRoundScore ?? "—"}</p>
+      </div>
+
+      {/* No-course prompt */}
+      {!course && (
+        <div style={{ padding: "16px 20px 0" }}>
+          <div style={{ color: "rgba(245,241,230,0.7)", fontSize: 13,
+            textAlign: "center", lineHeight: 1.5 }}>
+            Pick a course to see greens, yardages, and start a round.
           </div>
         </div>
-        {state.rounds.length > 1 && (
-          <div className="row" style={{ marginTop: 10, gap: 6, justifyContent: "flex-start" }}>
-            <span className="muted small">Average over</span>
-            {AVG_WINDOWS.map((w) => (
-              <button
-                key={w.label}
-                className={`chip ${avgWindow === w.n ? "on" : ""}`}
-                style={{ padding: "3px 10px" }}
-                onClick={() => setAvgWindow(w.n)}
-              >
-                {w.label}
+      )}
+    </div>
+  );
+}
+
+function StatTile({ label, value }) {
+  return (
+    <div style={{ background: "rgba(201,169,78,0.08)",
+      border: "1px solid rgba(201,169,78,0.15)",
+      borderRadius: 12, padding: "10px 12px", textAlign: "center" }}>
+      <div style={{ color: "#C9A94E", fontWeight: 800, fontSize: 20 }}>{value}</div>
+      <div style={{ color: "rgba(245,241,230,0.55)", fontSize: 10.5, fontWeight: 600,
+        marginTop: 1 }}>{label}</div>
+    </div>
+  );
+}
+
+function ProfileModal({ user, onUpdate, onSave }) {
+  const [name, setName] = useState(user.name || "");
+  const [email, setEmail] = useState(user.email || "");
+  const [hcap, setHcap] = useState(user.handicap ?? 14);
+  const [units, setUnits] = useState(user.units || "yards");
+
+  return (
+    <div style={{ minHeight: "100vh", paddingBottom: 40 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "66px 20px 16px" }}>
+        <button onClick={onSave}
+          style={{ background: "none", border: "none", color: "#C9A94E",
+            fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
+          Back
+        </button>
+        <div style={{ color: "#F5F1E6", fontWeight: 800, fontSize: 17 }}>Profile</div>
+        <button onClick={onSave}
+          style={{ background: "none", border: "none", color: "#C9A94E",
+            fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
+          Save
+        </button>
+      </div>
+
+      <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={{ background: "linear-gradient(160deg, #1B3B26, #12281B)",
+          border: "1px solid rgba(201,169,78,0.2)", borderRadius: 20, padding: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 14 }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%",
+              background: "linear-gradient(160deg, #DDBB63, #B8933B)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#1B3B26", fontWeight: 700, fontSize: 20 }}>
+              {(name || "Y")[0].toUpperCase()}
+            </div>
+            <input value={name} onChange={e => setName(e.target.value)}
+              style={{ flex: 1, background: "rgba(245,241,230,0.08)",
+                border: "1px solid rgba(201,169,78,0.2)", borderRadius: 10,
+                color: "#F5F1E6", padding: "10px 12px", fontSize: 15,
+                fontWeight: 700, outline: "none" }}
+              placeholder="Your name" />
+          </div>
+          <input value={email} onChange={e => setEmail(e.target.value)}
+            style={{ width: "100%", background: "rgba(245,241,230,0.08)",
+              border: "1px solid rgba(201,169,78,0.2)", borderRadius: 10,
+              color: "#F5F1E6", padding: "10px 12px", fontSize: 14,
+              fontWeight: 600, outline: "none", boxSizing: "border-box" }}
+            placeholder="you@email.com" />
+        </div>
+
+        <Card title="Distance Units">
+          <div style={{ display: "flex", gap: 4, background: "rgba(245,241,230,0.06)",
+            padding: 4, borderRadius: 999 }}>
+            {["yards", "meters"].map(u => (
+              <button key={u} onClick={() => setUnits(u)}
+                style={{ flex: 1, padding: "8px 0", border: "none",
+                  borderRadius: 999, cursor: "pointer",
+                  background: units === u ? "linear-gradient(160deg, #DDBB63, #B8933B)" : "transparent",
+                  color: units === u ? "#1B3B26" : "rgba(245,241,230,0.7)",
+                  fontWeight: 700, fontSize: 13, textTransform: "capitalize" }}>
+                {u}
               </button>
             ))}
           </div>
-        )}
+        </Card>
+
+        <Card title="Handicap Index">
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button onClick={() => setHcap(Math.max(0, hcap - 1))}
+              style={{ width: 38, height: 38, borderRadius: "50%",
+                background: "rgba(201,169,78,0.2)", border: "none",
+                color: "#C9A94E", fontSize: 20, cursor: "pointer" }}>
+              -
+            </button>
+            <div style={{ flex: 1, textAlign: "center", color: "#C9A94E",
+              fontWeight: 800, fontSize: 22 }}>{typeof hcap === "number" ? hcap.toFixed(1) : hcap}</div>
+            <button onClick={() => setHcap(hcap + 1)}
+              style={{ width: 38, height: 38, borderRadius: "50%",
+                background: "rgba(201,169,78,0.2)", border: "none",
+                color: "#C9A94E", fontSize: 20, cursor: "pointer" }}>
+              +
+            </button>
+          </div>
+        </Card>
+
+        <button onClick={onSave}
+          style={{ width: "100%", background: "linear-gradient(160deg, #DDBB63, #B8933B)",
+            border: "none", borderRadius: 999, padding: "15px 0",
+            color: "#1B3B26", fontWeight: 800, fontSize: 15, cursor: "pointer" }}>
+          Save
+        </button>
       </div>
+    </div>
+  );
+}
 
-      <div className="card">
-        <div className="row">
-          <strong style={{ fontSize: 14 }}>Players</strong>
-          <span className="muted small">{playerNames.length} of {1 + MAX_EXTRA_PLAYERS} added</span>
-        </div>
+function Card({ title, children }) {
+  return (
+    <div style={{ background: "linear-gradient(160deg, #1B3B26, #12281B)",
+      border: "1px solid rgba(201,169,78,0.2)", borderRadius: 20, padding: 16 }}>
+      <div style={{ color: "#F5F1E6", fontWeight: 700, fontSize: 15, marginBottom: 10 }}>{title}</div>
+      {children}
+    </div>
+  );
+}
 
-        <div className="player-row-card">
-          <div className="player-avatar">{initial(profileName)}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 700 }}>{profileName}</div>
-            {badgeHandicap != null && <div className="muted small">HCP {badgeHandicap}</div>}
-          </div>
-        </div>
+function CoursePicker({ tab, setTab, nearby, nearbyBusy, nearbyMsg, query, setQuery, searchBusy, searchResults, onSelect, onClose, loadingCourse }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const showList = tab === "nearby" ? nearby : searchResults;
 
-        {extraPlayers.map((name, i) => (
-          <div key={i}>
-            <div className="player-row-card">
-              <div className="player-avatar">{initial(name || `P${i + 2}`)}</div>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => updateExtra(i, e.target.value)}
-                placeholder={`Player ${i + 2}`}
-                style={{ flex: 1 }}
-              />
-              {state.golfers?.[name]?.handicapIndex != null && (
-                <span className="muted small" style={{ flexShrink: 0 }}>HCP {state.golfers[name].handicapIndex}</span>
-              )}
-              <button
-                className="player-chevron"
-                aria-label="Swap in a recent player"
-                onClick={() => setPickerOpenIdx(pickerOpenIdx === i ? null : i)}
-              >
-                {pickerOpenIdx === i ? "▲" : "▼"}
-              </button>
-              <button className="player-chevron" aria-label="Remove player" onClick={() => removeExtra(i)}>
-                ✕
-              </button>
-            </div>
-            {pickerOpenIdx === i && knownPlayers.length > 0 && (
-              <div className="chips" style={{ marginBottom: 8 }}>
-                {knownPlayers.map((n) => (
-                  <button key={n} className="chip" onClick={() => updateExtra(i, n)}>
-                    {n}{state.golfers[n]?.handicapIndex != null ? ` (${state.golfers[n].handicapIndex})` : ""}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        ))}
-
-        {extraPlayers.length < MAX_EXTRA_PLAYERS && (
-          <button className="btn ghost" style={{ marginTop: 8, height: 40 }} onClick={addExtra}>
-            + Add player
+  return (
+    <div style={{ minHeight: "100vh", paddingBottom: 60, background: "#0F2419" }}>
+      <div style={{ padding: "66px 20px 16px", borderBottom: "1px solid rgba(201,169,78,0.15)" }}>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <button onClick={onClose}
+            style={{ background: "none", border: "none", color: "#C9A94E",
+              fontWeight: 700, fontSize: 15, cursor: "pointer" }}>
+            Close
           </button>
-        )}
-
-        {knownPlayers.length > 0 && (
-          <div style={{ marginTop: 10 }}>
-            <button
-              className="small"
-              style={{ background: "none", border: "none", color: "var(--gold)", cursor: "pointer", padding: 0 }}
-              onClick={() => setManagingPlayers((m) => !m)}
-            >
-              {managingPlayers ? "Done managing" : "Manage remembered players"}
-            </button>
-            {managingPlayers && (
-              <div style={{ marginTop: 6 }}>
-                {knownPlayers.map((n) => (
-                  <div key={n} className="list-row row">
-                    <span style={{ fontSize: 13 }}>
-                      {n}{state.golfers[n]?.handicapIndex != null ? ` (${state.golfers[n].handicapIndex})` : ""}
-                    </span>
-                    <button
-                      className="chip"
-                      style={{ color: "var(--coral-delete)" }}
-                      onClick={() => update(removeGolfer, n)}
-                    >
-                      🗑 Delete
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <button className="btn" style={{ marginTop: 14 }} onClick={openCoursePicker}>
-        Start Round
-      </button>
-
-      <div className="card">
-        <strong style={{ fontSize: 14 }}>Your bag</strong>
-        <div className="clubbar">
-          {state.bag.slice(0, 8).map((c) => {
-            const { yards } = clubAverage(c);
-            const maxYards = Math.max(...state.bag.slice(0, 8).map((x) => clubAverage(x).yards), 1);
-            return (
-              <div className="col" key={c.id}>
-                <div
-                  className="bar"
-                  style={{ height: `${Math.max(12, (yards / maxYards) * 60)}px` }}
-                  title={`${c.name}: ${convertDistance(yards, dUnit)} ${distanceLabel(dUnit)}`}
-                />
-                <div className="lbl">{c.short}</div>
-              </div>
-            );
-          })}
+          <div style={{ flex: 1, textAlign: "center", color: "#F5F1E6",
+            fontWeight: 800, fontSize: 17 }}>Pick a course</div>
+          <div style={{ width: 60 }} />
+        </div>
+        <div style={{ display: "flex", gap: 6, marginTop: 12 }}>
+          <button onClick={() => setTab("nearby")}
+            style={{ flex: 1, padding: "8px 0", border: "none", borderRadius: 999,
+              background: tab === "nearby" ? "#C9A94E" : "rgba(245,241,230,0.08)",
+              color: tab === "nearby" ? "#1B3B26" : "rgba(245,241,230,0.7)",
+              fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+            Nearby
+          </button>
+          <button onClick={() => setTab("search")}
+            style={{ flex: 1, padding: "8px 0", border: "none", borderRadius: 999,
+              background: tab === "search" ? "#C9A94E" : "rgba(245,241,230,0.08)",
+              color: tab === "search" ? "#1B3B26" : "rgba(245,241,230,0.7)",
+              fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+            Search
+          </button>
         </div>
       </div>
 
-      <div className="card">
-        <strong style={{ fontSize: 14 }}>Recent rounds</strong>
-        {recent.length === 0 && (
-          <p className="muted" style={{ marginBottom: 0 }}>
-            Your first round will show up here.
-          </p>
-        )}
-        {recent.map((r) => {
-          const s = roundStats(r);
-          return (
-            <div className="list-row row" key={r.id}>
-              <div>
-                <div style={{ fontSize: 14 }}>{r.course}</div>
-                <div className="muted small">
-                  {new Date(r.startedAt).toLocaleDateString()} ·{" "}
-                  {r.players.join(", ")}
-                </div>
-              </div>
-              <strong className="num">
-                {s.holesPlayed ? s.strokes : "—"}
-              </strong>
-            </div>
-          );
-        })}
-      </div>
-
-      {pickingCourse && (
-        <div className="picker-screen">
-          <div className="picker-header">
-            <button
-              className="picker-back"
-              aria-label={selectedCourse ? "Back to course list" : "Close"}
-              onClick={() => (selectedCourse ? setSelectedCourse(null) : setPickingCourse(false))}
-            >
-              ←
-            </button>
-            <span className="picker-title">
-              {selectedCourse ? "Pick your tee" : "Pick your course"}
-            </span>
-            {!selectedCourse && (
-              <button
-                className="chip"
-                aria-label="Search courses"
-                onClick={() => setSearchOpen((v) => !v)}
-              >
-                🔍
-              </button>
-            )}
-          </div>
-
-          {!selectedCourse && searchOpen && (
-            <div style={{ padding: "12px 16px 0" }}>
-              <input
-                type="text"
-                autoFocus
-                placeholder="Search courses by name…"
-                value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
-              />
-            </div>
-          )}
-
-          {!selectedCourse && !(searchOpen && searchQuery.trim()) && (
-            <div className="picker-tabs">
-              <button className={`chip ${pickerTab === "nearby" ? "on" : ""}`} onClick={() => setPickerTab("nearby")}>Nearby</button>
-              <button className={`chip ${pickerTab === "recent" ? "on" : ""}`} onClick={() => setPickerTab("recent")}>Recent</button>
-              <button className={`chip ${pickerTab === "favourites" ? "on" : ""}`} onClick={() => setPickerTab("favourites")}>Favourites</button>
-            </div>
-          )}
-
-          <div className="picker-body">
-            {!selectedCourse && (
-              <>
-                {searchOpen && searchQuery.trim() ? (
-                  <>
-                    {searchBusy && <p className="muted small" style={{ marginTop: 12 }}>Searching…</p>}
-                    {!searchBusy && !searchResults.length && (
-                      <p className="muted small" style={{ marginTop: 12 }}>No courses matched "{searchQuery.trim()}".</p>
-                    )}
-                    <div style={{ marginTop: 8 }}>{searchResults.map(courseRow)}</div>
-                  </>
-                ) : (
-                  <>
-                    {loadingCourse && <p className="muted small" style={{ marginTop: 12 }}>Loading course details…</p>}
-
-                    {pickerTab === "nearby" && (
-                      <>
-                        {nearbyBusy && (
-                          <p className="muted small" style={{ marginTop: 12 }}>📍 Finding golf courses near you…</p>
-                        )}
-                        {nearbyMsg && <p className="muted small" style={{ marginTop: 12 }}>{nearbyMsg}</p>}
-                        <div style={{ marginTop: 8 }}>{nearby.map(courseRow)}</div>
-                        {nearby.length > 0 && (
-                          <p className="small" style={{ opacity: 0.6, marginTop: 8 }}>{ATTRIBUTION}</p>
-                        )}
-                      </>
-                    )}
-
-                    {pickerTab === "recent" && (
-                      <div style={{ marginTop: 8 }}>
-                        {state.recentCourses.length === 0 ? (
-                          <p className="muted small">No recently played courses yet.</p>
-                        ) : (
-                          state.recentCourses.map(courseRow)
-                        )}
-                      </div>
-                    )}
-
-                    {pickerTab === "favourites" && (
-                      <div style={{ marginTop: 8 }}>
-                        {state.favoriteCourses.length === 0 ? (
-                          <p className="muted small">Tap the star on a course to save it here.</p>
-                        ) : (
-                          state.favoriteCourses.map(courseRow)
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
-                <button className="btn ghost" style={{ marginTop: 14 }} onClick={() => start(null)}>
-                  Skip — start without a course
-                </button>
-              </>
-            )}
-
-            {selectedCourse && (
-              <>
-                <p className="small" style={{ color: "var(--gold)", marginTop: 10 }}>
-                  {selectedCourse.name}
-                  {selectedCourse.holes ? ` · par/yardage loaded for ${selectedCourse.holes.length} holes` : " · no hole data available"}
-                </p>
-                {selectedCourse.tees?.some((t) => t.rating != null && t.slope != null) ? (
-                  <div className="chips" style={{ marginTop: 10 }}>
-                    {selectedCourse.tees
-                      .filter((t) => t.rating != null && t.slope != null)
-                      .map((t) => (
-                        <button
-                          key={t.key}
-                          className={`chip ${selectedTee?.key === t.key ? "on" : ""}`}
-                          onClick={() => setSelectedTee(t)}
-                        >
-                          {t.name} {t.gender ? `(${t.gender[0]})` : ""} · {t.rating}/{t.slope}
-                        </button>
-                      ))}
-                  </div>
-                ) : (
-                  <p className="muted small" style={{ marginTop: 8 }}>
-                    No tee ratings available for this course — net scoring won't be available this round.
-                  </p>
-                )}
-                <button className="btn" style={{ marginTop: 16 }} onClick={() => start(selectedCourse)}>
-                  Start round at {selectedCourse.name}
-                </button>
-              </>
-            )}
-          </div>
+      {tab === "search" && (
+        <div style={{ padding: "12px 20px" }}>
+          <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            style={{ width: "100%", background: "rgba(245,241,230,0.08)",
+              border: "1px solid rgba(201,169,78,0.2)", borderRadius: 10,
+              color: "#F5F1E6", padding: "10px 12px", fontSize: 14, outline: "none",
+              boxSizing: "border-box" }}
+            placeholder="Search course name..." />
         </div>
       )}
 
-      {profileOpen && (
-        <div className="profile-screen">
-          <div className="profile-topbar">
-            <button className="profile-topbar-btn" onClick={() => setProfileOpen(false)} aria-label="Back">‹</button>
-            <span className="profile-topbar-title">Profile</span>
-            <button className="profile-save" onClick={saveProfile}>Save</button>
+      <div style={{ padding: "20px", display: "flex", flexDirection: "column", gap: 8 }}>
+        {nearbyBusy && (
+          <div style={{ color: "rgba(245,241,230,0.7)", textAlign: "center", padding: 20 }}>
+            Finding courses near you...
           </div>
-          <div className="profile-body">
-            <div className="row" style={{ gap: 12, justifyContent: "flex-start" }}>
-              <button
-                className="mycard-avatar"
-                style={{ width: 56, height: 56, border: "none", cursor: "pointer" }}
-                onClick={() => avatarInputRef.current?.click()}
-                aria-label="Change profile photo"
-              >
-                {state.profile?.avatar ? <img src={state.profile.avatar} alt="" /> : initial(nameDraft)}
-              </button>
-              <input
-                ref={avatarInputRef}
-                type="file"
-                accept="image/*"
-                style={{ display: "none" }}
-                onChange={onAvatarFile}
-              />
-              <div style={{ flex: 1 }}>
-                <p className="field-label" style={{ margin: "0 0 6px" }}>Name</p>
-                <input
-                  type="text"
-                  value={nameDraft}
-                  onChange={(e) => setNameDraft(e.target.value)}
-                  placeholder="You"
-                />
-              </div>
-            </div>
-
-            <p className="field-label">Email Scorecards</p>
-            <div className="card" style={{ marginTop: 0 }}>
-              <input
-                type="email"
-                value={emailDraft}
-                onChange={(e) => setEmailDraft(e.target.value)}
-                placeholder="you@email.com"
-              />
-              <label className="checkbox-row" style={{ marginTop: 12 }}>
-                <span
-                  className={`checkbox-box ${state.profile?.emailScorecardOnFinish ? "checked" : ""}`}
-                  onClick={() => update(setProfile, { emailScorecardOnFinish: !state.profile?.emailScorecardOnFinish })}
-                >
-                  {state.profile?.emailScorecardOnFinish ? "✓" : ""}
-                </span>
-                <span style={{ fontSize: 14 }}>Email me my scorecard after each round</span>
-              </label>
-            </div>
-
-            <p className="field-label">Distance Units</p>
-            <div className="segmented">
-              <button className={distanceUnitDraft === "yards" ? "on" : ""} onClick={() => setDistanceUnitDraft("yards")}>Yards</button>
-              <button className={distanceUnitDraft === "meters" ? "on" : ""} onClick={() => setDistanceUnitDraft("meters")}>Meters</button>
-            </div>
-
-            <p className="field-label">Wind Speed</p>
-            <div className="segmented">
-              <button className={windUnitDraft === "mph" ? "on" : ""} onClick={() => setWindUnitDraft("mph")}>mph</button>
-              <button className={windUnitDraft === "kph" ? "on" : ""} onClick={() => setWindUnitDraft("kph")}>kph</button>
-            </div>
-
-            <p className="field-label">Handicap Index</p>
-            <div className="card" style={{ marginTop: 0 }}>
-              {handicapCalc ? (
-                <>
-                  <div className="row">
-                    <span className="muted small">Calculated from your rounds</span>
-                    <span className="muted small">{handicapCalc.roundsUsed} round{handicapCalc.roundsUsed === 1 ? "" : "s"}</span>
-                  </div>
-                  <p className="value num" style={{ fontSize: 28, margin: "4px 0 0", color: "var(--gold)" }}>
-                    {handicapCalc.index}
-                  </p>
-                  <p className="muted small" style={{ margin: "2px 0 0" }}>
-                    {handicapCalc.roundsUsed < 3
-                      ? "Provisional — play more rounds with a linked course for a stable estimate."
-                      : "Estimated (WHS-style) from your linked-course rounds — not an official handicap."}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="muted small" style={{ marginTop: 0 }}>Manually update your handicap</p>
-                  <div className="stepper">
-                    <button onClick={() => setHandicapDraft((h) => (Math.round((parseFloat(h || 0) - 0.1) * 10) / 10).toFixed(1))}>−</button>
-                    <span className="stepper-value num">{handicapDraft === "" ? "—" : handicapDraft}</span>
-                    <button onClick={() => setHandicapDraft((h) => (Math.round((parseFloat(h || 0) + 0.1) * 10) / 10).toFixed(1))}>+</button>
-                  </div>
-                </>
-              )}
-            </div>
-
-            <button className="btn" style={{ marginTop: 20 }} onClick={saveProfile}>
-              Save
-            </button>
-
-            <div style={{ marginTop: 24, paddingTop: 16, borderTop: "1px solid var(--card-border)" }}>
-              <strong style={{ fontSize: 14 }}>All scorecards</strong>
-              <p className="muted small" style={{ marginTop: 4 }}>
-                Email a compact summary of every round you've played ({state.rounds.length} so far).
-              </p>
-              <button className="btn ghost" style={{ marginTop: 8, height: 44 }} onClick={emailAllScorecards}>
-                ✉ Email all scorecards
-              </button>
-            </div>
-
-            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid var(--card-border)" }}>
-              <strong style={{ fontSize: 14 }}>Backup</strong>
-              <p className="muted small" style={{ marginTop: 4 }}>
-                Everything lives only on this device. Export a copy so a lost phone or
-                reinstall doesn't lose your rounds, handicap, and bag.
-              </p>
-              <div className="row" style={{ gap: 8, marginTop: 10 }}>
-                <button className="btn ghost" style={{ flex: 1, height: 44 }} onClick={doExport}>
-                  ⬇ Export backup
-                </button>
-                <button
-                  className="btn ghost"
-                  style={{ flex: 1, height: 44 }}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  ⬆ Import backup
-                </button>
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="application/json"
-                style={{ display: "none" }}
-                onChange={onImportFile}
-              />
-              {importMsg && <p className="small" style={{ marginTop: 8, color: "var(--gold)" }}>{importMsg}</p>}
-            </div>
+        )}
+        {!nearbyBusy && nearbyMsg && tab === "nearby" && (
+          <div style={{ color: "rgba(245,241,230,0.7)", textAlign: "center", padding: 20 }}>{nearbyMsg}</div>
+        )}
+        {loadingCourse && (
+          <div style={{ color: "#C9A94E", textAlign: "center", padding: 20, fontWeight: 700 }}>
+            Loading course...
           </div>
-        </div>
-      )}
-    </>
+        )}
+        {showList.map((c) => (
+          <button key={c.id} onClick={() => onSelect(c)}
+            style={{ background: "linear-gradient(160deg, #1B3B26, #12281B)",
+              border: "1px solid rgba(201,169,78,0.2)", borderRadius: 14,
+              padding: 14, cursor: "pointer", textAlign: "left", color: "#F5F1E6", width: "100%" }}>
+            <div style={{ fontWeight: 700, fontSize: 14.5, color: "#F5F1E6" }}>{c.name}</div>
+            <div style={{ fontSize: 12, color: "rgba(245,241,230,0.55)", marginTop: 2, fontWeight: 600 }}>
+              {c.city || c.state || ""}{(c.city && c.state) ? ", " : ""}{c.state || ""}
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
