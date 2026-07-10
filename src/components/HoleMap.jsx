@@ -7,14 +7,36 @@ export default function HoleMap({ courseCache, courseId }) {
   const map = useRef(null);
   const marker = useRef(null);
   const [ready, setReady] = useState(false);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+
   const course = courseCache?.[courseId] || null;
 
   useEffect(() => {
-    if (!mapContainer.current) return;
-    if (!course || !course.greens?.length) return;
+    if (!course) {
+      setError("No course selected");
+      setLoading(false);
+      setReady(false);
+      return;
+    }
+    if (!course.greens || course.greens.length === 0) {
+      setError(`"${course.name}" has no green boundaries. Pick a US course for best coverage.`);
+      setLoading(false);
+      setReady(false);
+      return;
+    }
+
+    setError(null);
+    setLoading(true);
+
     const pts = course.greens[0].points;
     const lng = pts.reduce((s, p) => s + p.lon, 0) / pts.length;
     const lat = pts.reduce((s, p) => s + p.lat, 0) / pts.length;
+
+    if (!mapContainer.current || map.current) return;
+
+    console.log('Map init:', { course: course.name, lng, lat, greens: course.greens.length });
+
     try {
       map.current = new maplibregl.Map({
         container: mapContainer.current,
@@ -30,13 +52,13 @@ export default function HoleMap({ courseCache, courseId }) {
           layers: [{ id: "esri", type: "raster", source: "esri", minzoom: 0, maxzoom: 22 }],
         },
         center: [lng, lat],
-        zoom: 17,
+        zoom: 16,
         pitch: 0,
         attributionControl: false,
       });
-      map.current.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
 
       map.current.on("load", () => {
+        // Green polygons
         map.current.addSource("greens", {
           type: "geojson",
           data: {
@@ -45,7 +67,8 @@ export default function HoleMap({ courseCache, courseId }) {
               type: "Feature",
               properties: { id: i },
               geometry: {
-                type: "Polygon",coordinates: [[...g.points.map((p) => [p.lon, p.lat]), [g.points[0].lon, g.points[0].lat]]],
+                type: "Polygon",
+                coordinates: [[...g.points.map((p) => [p.lon, p.lat]), [g.points[0].lon, g.points[0].lat]]],
               },
             })),
           },
@@ -53,6 +76,7 @@ export default function HoleMap({ courseCache, courseId }) {
         map.current.addLayer({ id: "g-fill", type: "fill", source: "greens", paint: { "fill-color": "#22c55e", "fill-opacity": 0.5 } });
         map.current.addLayer({ id: "g-line", type: "line", source: "greens", paint: { "line-color": "#14532d", "line-width": 2 } });
 
+        // Yardage rings
         const mPerLat = 110574;
         const mPerLon = 111320 * Math.cos((lat * Math.PI) / 180);
         [100, 200, 250].forEach((y, i) => {
@@ -67,20 +91,31 @@ export default function HoleMap({ courseCache, courseId }) {
           map.current.addLayer({ id: "r" + y, type: "line", source: "r" + y, paint: { "line-color": i ? "#fff" : "#facc15", "line-width": 1.5, "line-dasharray": [5, 3] } });
         });
 
+        // Fit bounds
         const coords = course.greens.flatMap((g) => g.points.map((p) => [p.lon, p.lat]));
         if (coords.length) {
           const bounds = new maplibregl.LngLatBounds();
           coords.forEach((c) => bounds.extend(c));
-          map.current.fitBounds(bounds, { padding: 80, maxZoom: 19 });
+          map.current.fitBounds(bounds, { padding: 80, maxZoom: 19, duration: 1000 });
         }
         setReady(true);
+        setLoading(false);
+      });
+
+      map.current.on("error", (e) => {
+        console.warn("Map error:", e.error);
+        if (!ready) {
+          setError("Satellite tiles failed to load. Check internet connection.");
+          setLoading(false);
+        }
       });
     } catch (e) {
-      console.warn("Map init failed:", e);
+      setError("Failed to initialize map: " + e.message);
+      setLoading(false);
     }
-    return () => { if (map.current) { try { map.current.remove(); } catch {} map.current = null; } };
   }, [courseId]);
 
+  // Live GPS dot (only after map is ready)
   useEffect(() => {
     if (!ready || !map.current) return;
     if (!marker.current) {
@@ -99,21 +134,42 @@ export default function HoleMap({ courseCache, courseId }) {
     return () => clearInterval(id);
   }, [ready]);
 
+  // Show error screen
+  if (error && !ready) {
+    return (
+      <div style={{ position: "fixed", inset: 0, background: "#000", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+        <div style={{ color: "#fff", background: "#1a0a0a", border: "1px solid #ef4444", borderRadius: 12, padding: "24px 28px", textAlign: "center", maxWidth: 400 }}>
+          <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 12, color: "#ef4444" }}>⚠️ No Map Available</div>
+          <div style={{ fontSize: 14, lineHeight: 1.6, color: "#fca5a5" }}>{error}</div>
+        </div>
+      </div>
+    );
+  }
+
+  // Map view
   return (
     <div style={{ position: "fixed", inset: 0, background: "#000", zIndex: 50 }}>
       <div ref={mapContainer} style={{ width: "100%", height: "100%" }} />
+
+      {/* Home / Back */}
       <div style={{ position: "absolute", top: 16, left: 16, zIndex: 10 }}>
         <button onClick={() => location.reload()} style={{ background: "rgba(0,0,0,0.7)", color: "#fff", border: 0, borderRadius: 20, padding: "8px 16px", fontSize: 14, cursor: "pointer" }}>Home</button>
       </div>
-      <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 10, background: "rgba(0,0,0,0.7)", color: "#fff", borderRadius: 20, padding: "8px 18px", fontSize: 14, fontWeight: 600 }}>
-        {course?.name || "Course"} - Sat
+
+      {/* Title */}
+      <div style={{ position: "absolute", top: 16, left: "50%", transform: "translateX(-50%)", zIndex: 10, background: "rgba(0,0,0,0.7)", color: "#fff", borderRadius: 20, padding: "8px 18px", fontSize: 14, fontWeight: 600, maxWidth: 280, overflow: "hidden", textOverflow: "ellipsis" }}>
+        {course?.name || "Course"} - ️
       </div>
+
+      {/* Legend */}
       <div style={{ position: "absolute", bottom: 20, left: 16, zIndex: 10, background: "rgba(0,0,0,0.75)", color: "#fff", borderRadius: 10, padding: "10px 14px", fontSize: 12, lineHeight: 1.7 }}>
         <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#22c55e", verticalAlign: "middle", marginRight: 5 }} />Green<br/>
         <span style={{ display: "inline-block", width: 10, height: 10, borderRadius: "50%", background: "#2563eb", verticalAlign: "middle", marginRight: 5 }} />You<br/>
         100 / 200 / 250 yd rings
       </div>
-      {!ready && (
+
+      {/* Loading */}
+      {loading && !error && (
         <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", color: "#fff", background: "rgba(0,0,0,0.7)", padding: "16px 28px", borderRadius: 12 }}>
           Loading satellite view...
         </div>
@@ -121,3 +177,4 @@ export default function HoleMap({ courseCache, courseId }) {
     </div>
   );
 }
+
