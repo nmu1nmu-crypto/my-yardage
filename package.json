@@ -2,7 +2,7 @@
   "name": "my-yardage",
   "private": true,
   "version": "0.1.0",
-  "description": "A pocket caddie that knows your game \u2014 real club distances, money games, stats, and plays-like yardages. No course data fees.",
+  "description": "A pocket caddie that knows your game — real club distances, money games, stats, and plays-like yardages. No course data fees.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,15 +10,16 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
     "@capacitor/core": "7.6.7",
+    "@capacitor/geolocation": "7.1.8",
     "@capacitor/ios": "7.6.7",
-    "@capacitor/geolocation": "7.1.8"
+    "maplibre-gl": "^5.24.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "7.6.7",
     "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^5.4.11",
-    "@capacitor/cli": "7.6.7"
+    "vite": "^5.4.11"
   }
 }

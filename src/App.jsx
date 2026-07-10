@@ -26,7 +26,6 @@ export default function App() {
   const [mapMode, setMapMode] = useState(false);
 
   useEffect(() => store.save(state), [state]);
-
   const update = (fn, ...args) => setState((s) => fn(s, ...args));
 
   const screens = {
