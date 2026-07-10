@@ -141,6 +141,12 @@ export default function Home({ state, hero, update, onStartRound }) {
     reader.readAsText(file);
   }
 
+
+// UK courses missing from OpenGolfAPI but mapped in OSM. Pinned to top of nearby picker.
+const UK_FAVORITES = [
+  { id: "woolston-manor", name: "Woolston Manor Golf & Country Club", city: "Warrington", state: "UK", lat: 53.40918, lng: -2.52536 },
+];
+
   async function openCoursePicker() {
     setSelectedCourse(null);
     setSelectedTee(null);
@@ -162,7 +168,22 @@ export default function Home({ state, hero, update, onStartRound }) {
         courses = await searchCourses({ lat: pos.lat, lng: pos.lon, radiusMi, limit: 50 });
         if (courses.length >= 20) break;
       }
-      setNearby(courses);
+      // Sort by actual distance from user GPS, not API database-ID order
+      const toRad = (d) => (d * Math.PI) / 180;
+      const R = 3958.8;
+      const uLat = toRad(pos.lat), uLon = toRad(pos.lon);
+      courses.sort((a, b) => {
+        const aLat = toRad(a.lat ?? a.latitude ?? 0), aLon = toRad(a.lng ?? a.longitude ?? 0);
+        const bLat = toRad(b.lat ?? b.latitude ?? 0), bLon = toRad(b.lng ?? b.longitude ?? 0);
+        const dA = Math.sin((aLat-uLat)/2)**2 + Math.cos(uLat)*Math.cos(aLat)*Math.sin((aLon-uLon)/2)**2;
+        const dB = Math.sin((bLat-uLat)/2)**2 + Math.cos(uLat)*Math.cos(bLat)*Math.sin((bLon-uLon)/2)**2;
+        return 2*R*Math.asin(Math.sqrt(dA)) - 2*R*Math.asin(Math.sqrt(dB));
+      });
+      // UK favorites always surfaced at the top (e.g. Woolston Manor even if not in API)
+      const favIds = new Set(UK_FAVORITES.map((f) => f.id));
+      const merged = [...UK_FAVORITES, ...courses.filter((c) => !favIds.has(c.id))];
+      setNearby(merged);
+      if (!courses.length) setNearbyMsg("No courses found nearby");
       if (!courses.length) setNearbyMsg("No courses found nearby — you can still start without one.");
     } catch {
       setNearbyMsg("Couldn't read GPS — check location permission, or start without a course.");
